@@ -14,16 +14,15 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Production-Grade Anti-Detection Gesture Engine.
+ * 2026 Optimized Anti-Detection Gesture Engine.
  *
- * Implements advanced non-linear stochastic input simulation:
- * - Gaussian distribution targeting (\mu = 0, \sigma = 2.5)
- * - Touch Micro-Drift Physics (1-2px sub-pixel drift simulating flesh deformation)
- * - Stochastic tap hold durations (40ms - 80ms)
- * - Multi-touch simultaneous troop deployment across multiple coordinate paths
- * - Pinch-to-zoom camera calibration routine
- * - Cubic Bézier curve trajectory interpolation for swipes & drags
- * - Stochastic non-blocking delays with randomized variance
+ * Implements:
+ * - Micro-drift touch paths (1-2px sub-pixel drift simulating natural fingertip flesh compression)
+ * - Gaussian spatial jitter (\sigma = 2.5)
+ * - Hero Equipment Staggering (sequential multi-touch deployment loops targeting Hero deployment & equipment ability triggers)
+ * - Multi-touch simultaneous troop funneling
+ * - Camera Calibration (two-finger pinch zoom & corner alignment drag)
+ * - Non-blocking stochastic delays
  */
 class HumanGestureDispatcher(
     private val serviceProvider: () -> AccessibilityService?
@@ -35,12 +34,12 @@ class HumanGestureDispatcher(
     private val random = Random()
 
     /**
-     * Executes a humanized tap with Gaussian jitter, Touch Micro-Drift physics, and variable hold duration.
+     * Executes a humanized tap with Gaussian spatial jitter and Touch Micro-Drift physics.
      *
      * @param x Target center X coordinate.
      * @param y Target center Y coordinate.
-     * @param jitterRadius Maximum boundary radius for Gaussian jitter.
-     * @return True if gesture was successfully dispatched and completed by system.
+     * @param jitterRadius Maximum boundary radius for Gaussian perturbation.
+     * @return True if gesture was successfully dispatched and completed.
      */
     suspend fun humanTap(
         x: Float,
@@ -49,27 +48,22 @@ class HumanGestureDispatcher(
     ): Boolean {
         val service = serviceProvider()
         if (service == null) {
-            Log.w(TAG, "AccessibilityService is not available. Cannot dispatch tap.")
+            Log.w(TAG, "AccessibilityService unavailable. Cannot dispatch tap.")
             return false
         }
 
-        // Gaussian perturbation around mean=0, stdDev=2.5
-        val gaussianX = (random.nextGaussian() * 2.5).toFloat()
-        val gaussianY = (random.nextGaussian() * 2.5).toFloat()
+        val gaussianX = (random.nextGaussian() * 2.5).toFloat().coerceIn(-jitterRadius, jitterRadius)
+        val gaussianY = (random.nextGaussian() * 2.5).toFloat().coerceIn(-jitterRadius, jitterRadius)
 
-        val clampedX = gaussianX.coerceIn(-jitterRadius, jitterRadius)
-        val clampedY = gaussianY.coerceIn(-jitterRadius, jitterRadius)
+        val startX = (x + gaussianX).coerceAtLeast(1f)
+        val startY = (y + gaussianY).coerceAtLeast(1f)
 
-        val startX = (x + clampedX).coerceAtLeast(1f)
-        val startY = (y + clampedY).coerceAtLeast(1f)
-
-        // Micro-Drift Physics: 1-2px displacement during touch contact simulating flesh movement
+        // Micro-drift physics: 1.0px to 2.2px displacement during touch contact
         val driftAngle = random.nextDouble() * 2.0 * Math.PI
-        val driftDist = (1.0 + random.nextDouble() * 1.5).toFloat() // 1.0px to 2.5px
+        val driftDist = (1.0 + random.nextDouble() * 1.2).toFloat()
         val endX = (startX + driftDist * cos(driftAngle).toFloat()).coerceAtLeast(1f)
         val endY = (startY + driftDist * sin(driftAngle).toFloat()).coerceAtLeast(1f)
 
-        // Randomized human tap hold duration (40ms - 80ms)
         val holdDuration = (40L + random.nextInt(41)).coerceIn(40L, 80L)
 
         val path = Path().apply {
@@ -84,11 +78,7 @@ class HumanGestureDispatcher(
     }
 
     /**
-     * Executes multi-touch simultaneous troop deployment across multiple touch points.
-     * Builds concurrent GestureDescription.StrokeDescription paths for multi-finger deployment.
-     *
-     * @param points List of target drop coordinates.
-     * @return True if multi-touch gesture dispatched successfully.
+     * Executes multi-touch simultaneous troop deployment across multiple coordinate paths.
      */
     suspend fun humanMultiTouchDeploy(points: List<PointF>): Boolean {
         val service = serviceProvider()
@@ -97,7 +87,6 @@ class HumanGestureDispatcher(
         }
 
         val builder = GestureDescription.Builder()
-        // Max 10 concurrent strokes supported by Android Accessibility
         val safePoints = points.take(10)
 
         for (pt in safePoints) {
@@ -111,8 +100,7 @@ class HumanGestureDispatcher(
             val ex = (sx + driftDist * cos(driftAngle).toFloat()).coerceAtLeast(1f)
             val ey = (sy + driftDist * sin(driftAngle).toFloat()).coerceAtLeast(1f)
 
-            val holdDuration = (50L + random.nextInt(35)).coerceIn(45L, 85L)
-            // Micro stagger between finger contacts (0-15ms)
+            val holdDuration = (45L + random.nextInt(35)).coerceIn(45L, 80L)
             val startTime = random.nextInt(15).toLong()
 
             val path = Path().apply {
@@ -128,7 +116,35 @@ class HumanGestureDispatcher(
     }
 
     /**
-     * Executes a two-finger pinch-to-zoom-out gesture to normalize game camera framing.
+     * Staggered Hero & Equipment Ability Trigger:
+     * Selects Hero, places Hero onto the battlefield, and triggers equipment ability after designated delay.
+     */
+    suspend fun deployHeroWithEquipment(
+        heroSlotX: Float,
+        heroSlotY: Float,
+        dropX: Float,
+        dropY: Float,
+        abilityTriggerDelayMs: Long = 8000L
+    ): Boolean {
+        // 1. Select Hero Slot
+        humanTap(heroSlotX, heroSlotY, jitterRadius = 4f)
+        humanSleep(180L, 30L)
+
+        // 2. Drop Hero
+        val dropped = humanTap(dropX, dropY, jitterRadius = 10f)
+        if (!dropped) return false
+
+        // 3. Staggered delay before triggering active Hero Equipment ability
+        if (abilityTriggerDelayMs > 0) {
+            humanSleep(abilityTriggerDelayMs, 500L)
+            // Tap hero slot again to activate equipment ability
+            humanTap(heroSlotX, heroSlotY, jitterRadius = 4f)
+        }
+        return true
+    }
+
+    /**
+     * Pinch-to-zoom-out camera calibration.
      */
     suspend fun pinchZoomOut(
         centerX: Float = 960f,
@@ -160,7 +176,7 @@ class HumanGestureDispatcher(
     }
 
     /**
-     * Executes a humanized swipe using a cubic Bézier curve with randomized control anchors.
+     * Smooth Bézier curve swipe.
      */
     suspend fun humanSwipe(
         startX: Float,
@@ -169,14 +185,9 @@ class HumanGestureDispatcher(
         endY: Float,
         durationMs: Long = 350L
     ): Boolean {
-        val service = serviceProvider()
-        if (service == null) {
-            Log.w(TAG, "AccessibilityService is not available. Cannot dispatch swipe.")
-            return false
-        }
+        val service = serviceProvider() ?: return false
 
         val actualDuration = (durationMs + random.nextInt(60) - 30).coerceAtLeast(150L)
-
         val dx = endX - startX
         val dy = endY - startY
         val dist = sqrt((dx * dx + dy * dy).toDouble()).toFloat()
@@ -188,9 +199,8 @@ class HumanGestureDispatcher(
         val perpX = -dy / dist
         val perpY = dx / dist
 
-        // Random curvature amplitude (deflection)
-        val curveMagnitude1 = ((random.nextGaussian() * 18.0).toFloat()).coerceIn(-45f, 45f)
-        val curveMagnitude2 = ((random.nextGaussian() * 18.0).toFloat()).coerceIn(-45f, 45f)
+        val curveMagnitude1 = ((random.nextGaussian() * 16.0).toFloat()).coerceIn(-40f, 40f)
+        val curveMagnitude2 = ((random.nextGaussian() * 16.0).toFloat()).coerceIn(-40f, 40f)
 
         val p1x = startX + dx * 0.3f + perpX * curveMagnitude1
         val p1y = startY + dy * 0.3f + perpY * curveMagnitude1
@@ -209,9 +219,6 @@ class HumanGestureDispatcher(
         return dispatchGestureSuspending(service, gesture)
     }
 
-    /**
-     * Non-blocking stochastic sleep using coroutines.
-     */
     suspend fun humanSleep(baseMs: Long, varianceMs: Long = 50L) {
         val variance = if (varianceMs > 0) {
             (random.nextLong() % (varianceMs * 2 + 1)) - varianceMs
@@ -235,7 +242,7 @@ class HumanGestureDispatcher(
                 }
 
                 override fun onCancelled(gestureDescription: GestureDescription?) {
-                    Log.w(TAG, "Gesture dispatch was cancelled by system.")
+                    Log.w(TAG, "Gesture dispatch cancelled by system.")
                     if (continuation.isActive) {
                         continuation.resume(false)
                     }
@@ -244,7 +251,7 @@ class HumanGestureDispatcher(
 
             val dispatched = service.dispatchGesture(gesture, callback, null)
             if (!dispatched) {
-                Log.e(TAG, "dispatchGesture returned false immediately.")
+                Log.e(TAG, "dispatchGesture returned false.")
                 if (continuation.isActive) {
                     continuation.resume(false)
                 }

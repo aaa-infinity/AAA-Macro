@@ -12,6 +12,7 @@ import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.util.Log
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.Dispatchers
@@ -232,7 +233,7 @@ class VisionEngine(
             cropped = Bitmap.createBitmap(screenBitmap, safeLeft, safeTop, safeWidth, safeHeight)
             val image = InputImage.fromBitmap(cropped, 0)
 
-            val visionText = suspendCancellableCoroutine { continuation ->
+            val visionText = suspendCancellableCoroutine<Text?> { continuation ->
                 textRecognizer.process(image)
                     .addOnSuccessListener { result ->
                         if (continuation.isActive) continuation.resume(result)

@@ -21,30 +21,28 @@ import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import com.aaa.macro.MainActivity
 import com.aaa.macro.R
+import com.aaa.macro.engine.CutoutManager
+import com.aaa.macro.engine.FarmingFSM
 import com.aaa.macro.engine.HumanGestureDispatcher
-import com.aaa.macro.engine.MacroStateMachine
 import com.aaa.macro.engine.OfflineVisionEngine
 import com.aaa.macro.engine.ResolutionScaler
-import com.aaa.macro.engine.VisionEngine
 import com.aaa.macro.ui.FloatingOverlayView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 import org.opencv.android.OpenCVLoader
 
 /**
- * Foreground Service hosting the Floating Overlay UI,
- * MediaProjection Vision Engine, and Macro State Machine.
+ * Foreground Service hosting the Floating Mini-Hub UI,
+ * Cutout Safe-Area Manager, MediaProjection Engine, and Farming FSM.
  */
 class FloatingMenuService : Service() {
 
     companion object {
         private const val TAG = "FloatingMenuService"
         private const val NOTIFICATION_ID = 9001
-        private const val CHANNEL_ID = "aaa_macro_service_channel"
+        private const val CHANNEL_ID = "aaa_farming_service_channel"
 
         const val ACTION_START_WITH_PROJECTION = "com.aaa.macro.ACTION_START_WITH_PROJECTION"
         const val EXTRA_RESULT_CODE = "extra_result_code"
@@ -59,9 +57,10 @@ class FloatingMenuService : Service() {
     private lateinit var windowManager: WindowManager
     private lateinit var mediaProjectionManager: MediaProjectionManager
 
+    private var cutoutManager: CutoutManager? = null
     private var visionEngine: OfflineVisionEngine? = null
     private var gestureDispatcher: HumanGestureDispatcher? = null
-    private var stateMachine: MacroStateMachine? = null
+    private var farmingFSM: FarmingFSM? = null
     private var overlayView: FloatingOverlayView? = null
 
     override fun onCreate() {
@@ -70,7 +69,7 @@ class FloatingMenuService : Service() {
         Log.i(TAG, "FloatingMenuService onCreate()")
 
         if (!OpenCVLoader.initDebug()) {
-            Log.w(TAG, "OpenCV native library failed to load via OpenCVLoader.")
+            Log.w(TAG, "OpenCV native library loading notice.")
         } else {
             Log.i(TAG, "OpenCV loaded successfully.")
         }
@@ -95,7 +94,7 @@ class FloatingMenuService : Service() {
             if (resultCode != 0 && projectionData != null) {
                 setupEnginesAndOverlay(resultCode, projectionData)
             } else {
-                Log.e(TAG, "Invalid projection credentials received in onStartCommand.")
+                Log.e(TAG, "Invalid projection credentials in onStartCommand.")
             }
         }
         return START_NOT_STICKY
@@ -118,79 +117,74 @@ class FloatingMenuService : Service() {
         val screenWidth = if (size.x > 0) size.x else metrics.widthPixels
         val screenHeight = if (size.y > 0) size.y else metrics.heightPixels
 
+        // 1. Cutout Safe-Area Manager
+        val cutout = CutoutManager(applicationContext)
+        cutout.updateCutoutInsets(windowManager)
+        this.cutoutManager = cutout
+
+        // 2. Resolution Scaler & Offline Vision Engine
         val resolutionScaler = ResolutionScaler(screenWidth, screenHeight)
         val vision = OfflineVisionEngine(applicationContext, resolutionScaler)
         vision.initializeCapture(mediaProjection, screenWidth, screenHeight, metrics.densityDpi)
         this.visionEngine = vision
 
+        // 3. Humanized Gesture Dispatcher
         val gestures = HumanGestureDispatcher { MacroAccessibilityService.instance }
         this.gestureDispatcher = gestures
 
-        val machine = MacroStateMachine(applicationContext, vision, gestures)
-        this.stateMachine = machine
+        // 4. Farming Finite State Machine
+        val fsm = FarmingFSM(
+            context = applicationContext,
+            visionEngine = vision,
+            gestureDispatcher = gestures,
+            cutoutManager = cutout
+        )
+        this.farmingFSM = fsm
 
-        // Create and display floating overlay
+        // 5. Floating Overlay UI View
         overlayView?.detach()
         val overlay = FloatingOverlayView(
             context = applicationContext,
             windowManager = windowManager,
-            stateMachine = machine,
+            farmingFSM = fsm,
             onCloseRequested = {
                 stopSelf()
             }
         )
-        this.overlayView = overlay
         overlay.attach()
+        this.overlayView = overlay
 
-        // Observe state changes and update UI
-        serviceScope.launch {
-            machine.state.collectLatest { state ->
-                overlay.updateState(state)
-            }
-        }
-
-        serviceScope.launch {
-            machine.latestLoot.collectLatest { loot ->
-                overlay.updateLoot(loot.gold, loot.elixir)
-            }
-        }
-
-        serviceScope.launch {
-            machine.stats.collectLatest { stats ->
-                overlay.updateSearches(stats.totalSearches)
-            }
-        }
-
-        Log.i(TAG, "Engines and Floating Overlay fully initialized.")
+        Log.i(TAG, "All farming engines and floating overlay attached successfully.")
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                getString(R.string.notification_channel_name),
+                "AAA Macro Farming Service",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = getString(R.string.notification_channel_desc)
+                description = "Runs background vision capture and floating farming overlay"
                 setShowBadge(false)
             }
-            val manager = getSystemService(NotificationManager::class.java)
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
         }
     }
 
     private fun startForegroundWithNotification() {
+        val notificationIntent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,
-            Intent(this, MainActivity::class.java),
+            notificationIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.notification_title))
-            .setContentText(getString(R.string.notification_text))
-            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentTitle("AAA Farming Macro Active")
+            .setContentText("Automated multiplayer farming hub running.")
+            .setSmallIcon(R.drawable.ic_launcher)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -218,8 +212,8 @@ class FloatingMenuService : Service() {
         overlayView?.detach()
         overlayView = null
 
-        stateMachine?.release()
-        stateMachine = null
+        farmingFSM?.release()
+        farmingFSM = null
 
         visionEngine?.release()
         visionEngine = null

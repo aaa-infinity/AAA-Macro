@@ -9,7 +9,7 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Button
-import android.widget.EditText
+import android.widget.ImageView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.aaa.macro.databinding.ActivityMainBinding
@@ -17,7 +17,7 @@ import com.aaa.macro.service.FloatingMenuService
 import com.aaa.macro.service.MacroAccessibilityService
 
 /**
- * Main Setup Dashboard and Permission Orchestrator for AAA Macro.
+ * Modern Light Setup Dashboard for AAA Macro (Professional Farming Edition).
  */
 class MainActivity : AppCompatActivity() {
 
@@ -38,16 +38,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupListeners() {
         // 1. Accessibility Service Permission
-        binding.btnAccessibility.setOnClickListener {
+        binding.btnGrantAccessibility.setOnClickListener {
             val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(intent)
-            Toast.makeText(this, "Enable 'AAA Macro Automation Engine' in Accessibility list.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Enable 'AAA Macro Automation Engine' in the list.", Toast.LENGTH_LONG).show()
         }
 
         // 2. Floating Window Overlay Permission
-        binding.btnOverlay.setOnClickListener {
+        binding.btnGrantOverlay.setOnClickListener {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 val intent = Intent(
                     Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -59,19 +59,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 3. MediaProjection / Screen Capture Permission
-        binding.btnCapturePermission.setOnClickListener {
-            CapturePermissionActivity.launch(this)
-        }
-
-        // 4. Battery Optimization Whitelist
-        binding.btnBattery.setOnClickListener {
+        // 3. Battery Optimization Whitelist
+        binding.btnGrantBattery.setOnClickListener {
             requestBatteryOptimizationExemption()
         }
 
-        // Launch Macro Overlay Button
-        binding.btnLaunchMacro.setOnClickListener {
-            launchMacroIfReady()
+        // 4. Launch Floating Hub
+        binding.btnStartService.setOnClickListener {
+            launchFarmingHub()
         }
     }
 
@@ -97,11 +92,11 @@ class MainActivity : AppCompatActivity() {
         } else {
             true
         }
-        updateButtonState(binding.btnOverlay, canOverlay)
+        updatePermissionCard(binding.btnGrantOverlay, binding.iconStatusOverlay, canOverlay)
 
         // Accessibility Check
         val hasAccessibility = MacroAccessibilityService.isRunning
-        updateButtonState(binding.btnAccessibility, hasAccessibility)
+        updatePermissionCard(binding.btnGrantAccessibility, binding.iconStatusAccessibility, hasAccessibility)
 
         // Battery Optimization Check
         val isBatteryIgnored = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -110,41 +105,39 @@ class MainActivity : AppCompatActivity() {
         } else {
             true
         }
-        updateButtonState(binding.btnBattery, isBatteryIgnored)
-
-        // Floating Service Active Check
-        updateButtonState(binding.btnCapturePermission, FloatingMenuService.isRunning)
+        updatePermissionCard(binding.btnGrantBattery, binding.iconStatusBattery, isBatteryIgnored)
     }
 
-    private fun updateButtonState(button: Button, isGranted: Boolean) {
+    private fun updatePermissionCard(button: Button, icon: ImageView, isGranted: Boolean) {
         if (isGranted) {
-            button.text = getString(R.string.btn_granted)
-            button.setBackgroundColor(getColor(R.color.accent_green))
-            button.setTextColor(getColor(R.color.background_dark))
+            button.text = "Enabled"
             button.isEnabled = false
+            button.setTextColor(getColor(R.color.text_secondary))
+            icon.setImageResource(android.R.drawable.checkbox_on_background)
+            icon.setColorFilter(getColor(R.color.accent_green))
         } else {
-            button.text = getString(R.string.btn_grant)
-            button.setBackgroundColor(getColor(R.color.primary))
-            button.setTextColor(getColor(R.color.text_primary))
+            button.text = "Grant"
             button.isEnabled = true
+            button.setTextColor(getColor(R.color.accent_green_dark))
+            icon.setImageResource(android.R.drawable.presence_offline)
+            icon.setColorFilter(getColor(R.color.accent_red))
         }
     }
 
-    private fun launchMacroIfReady() {
+    private fun launchFarmingHub() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             Toast.makeText(this, "Please grant Floating Window overlay permission first.", Toast.LENGTH_SHORT).show()
             return
         }
 
         if (!MacroAccessibilityService.isRunning) {
-            Toast.makeText(this, "Please enable AAA Macro Accessibility Service first.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Please enable Accessibility Service first.", Toast.LENGTH_SHORT).show()
             val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
             startActivity(intent)
             return
         }
 
-        // Launch CapturePermissionActivity to acquire MediaProjection token and start FloatingMenuService
         CapturePermissionActivity.launch(this)
-        Toast.makeText(this, "Starting AAA Macro Overlay...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Launching AAA Farming Mini-Hub...", Toast.LENGTH_SHORT).show()
     }
 }

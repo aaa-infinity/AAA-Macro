@@ -1,26 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary">#6200EE</color>
-    <color name="primary_variant">#3700B3</color>
-    <color name="secondary">#03DAC6</color>
-    <color name="secondary_variant">#018786</color>
-    <color name="background_dark">#121212</color>
-    <color name="surface_dark">#1E1E2E</color>
-    <color name="surface_card">#27293D</color>
-    <color name="text_primary">#FFFFFF</color>
-    <color name="text_secondary">#A0A5BD</color>
-    <color name="text_muted">#6C7293</color>
+    <!-- Professional Light Palette (Porcelain White & Modern Slate) -->
+    <color name="primary">#10B981</color>
+    <color name="primary_variant">#059669</color>
+    <color name="secondary">#F59E0B</color>
+    <color name="secondary_variant">#D97706</color>
     
-    <!-- Accent & Status Colors -->
-    <color name="accent_green">#00E676</color>
-    <color name="accent_red">#FF5252</color>
-    <color name="accent_gold">#FFD700</color>
-    <color name="accent_elixir">#E040FB</color>
-    <color name="accent_blue">#448AFF</color>
-    <color name="accent_warning">#FFA726</color>
+    <!-- Background & Surface (Light Theme) -->
+    <color name="background_light">#F8FAFC</color>
+    <color name="surface_white">#FFFFFF</color>
+    <color name="surface_card_light">#FFFFFF</color>
+    <color name="surface_card_stroke">#E2E8F0</color>
+    <color name="surface_subtle">#F1F5F9</color>
+
+    <!-- Slate Typography -->
+    <color name="text_primary">#1E293B</color>
+    <color name="text_secondary">#64748B</color>
+    <color name="text_muted">#94A3B8</color>
     
-    <!-- Translucent Overlays -->
-    <color name="overlay_bg">#EE181A20</color>
-    <color name="overlay_border">#33FFFFFF</color>
-    <color name="overlay_pill_bg">#CC0D0E15</color>
+    <!-- Brand Accents & Status Indicators -->
+    <color name="accent_green">#10B981</color>
+    <color name="accent_green_light">#D1FAE5</color>
+    <color name="accent_green_dark">#047857</color>
+    <color name="accent_gold">#F59E0B</color>
+    <color name="accent_gold_light">#FEF3C7</color>
+    <color name="accent_elixir">#D946EF</color>
+    <color name="accent_elixir_light">#FAE8FF</color>
+    <color name="accent_red">#EF4444</color>
+    <color name="accent_red_light">#FEE2E2</color>
+    <color name="accent_blue">#3B82F6</color>
+    <color name="accent_blue_light">#DBEAFE</color>
+
+    <!-- Floating Overlay Light Theme -->
+    <color name="overlay_bg">#F8FAFC</color>
+    <color name="overlay_border">#CBD5E1</color>
+    <color name="overlay_pill_bg">#FFFFFF</color>
 </resources>

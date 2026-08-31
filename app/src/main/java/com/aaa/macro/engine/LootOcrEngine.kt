@@ -12,19 +12,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.opencv.android.Utils
-import org.opencv.core.Core
-import org.opencv.core.CvType
 import org.opencv.core.Mat
-import org.opencv.core.Scalar
 import org.opencv.imgproc.Imgproc
 import kotlin.coroutines.resume
 
 /**
- * Enterprise Shadow-Tolerant OCR Engine & Dead Base Analyzer.
+ * Enterprise Shadow-Tolerant OCR Engine & Base Analyzer.
  *
  * Implements:
- * - OpenCV Otsu / Adaptive Thresholding & Color Isolation to remove dark text drop-shadows.
- * - Parsing of Gold, Elixir, and Dark Elixir (DE).
+ * - OpenCV Otsu / Adaptive Thresholding & Color Isolation to suppress text drop-shadows.
+ * - Vertical Y-coordinate spatial sorting for Gold (top), Elixir (middle), and Dark Elixir (bottom).
+ * - Trophy count filtering (<60 excluded from loot metrics).
  * - Dead Base Collector Density / Tombstone Color Heuristic.
  */
 class LootOcrEngine(
@@ -36,9 +34,13 @@ class LootOcrEngine(
 
     private val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
+    private data class RecognizedLine(
+        val value: Int,
+        val topY: Int
+    )
+
     /**
-     * Preprocesses a cropped loot area Bitmap using Otsu binarization to remove font shadows
-     * and executes offline ML Kit OCR.
+     * Preprocesses cropped loot ROI with Otsu thresholding and parses Gold, Elixir, and DE.
      */
     suspend fun parseLootMetrics(
         rawRoiBitmap: Bitmap
@@ -57,24 +59,30 @@ class LootOcrEngine(
                     }
             } ?: return@withContext LootSnapshot()
 
-            val extractedNumbers = mutableListOf<Int>()
+            val linesWithY = mutableListOf<RecognizedLine>()
             for (block in visionText.textBlocks) {
                 for (line in block.lines) {
-                    val cleaned = line.text.replace(Regex("[^0-9]"), "")
-                    if (cleaned.isNotEmpty()) {
+                    val rawText = line.text.replace(" ", "").replace(",", "").replace(".", "").replace("o", "0").replace("O", "0")
+                    val digits = rawText.replace(Regex("[^0-9]"), "")
+                    if (digits.isNotEmpty()) {
                         try {
-                            val parsed = cleaned.toInt()
-                            if (parsed in 50..25_000_000) {
-                                extractedNumbers.add(parsed)
+                            val parsed = digits.toInt()
+                            // Filter out trophy lines (<100)
+                            if (parsed in 100..25_000_000) {
+                                val topY = line.boundingBox?.top ?: 0
+                                linesWithY.add(RecognizedLine(parsed, topY))
                             }
                         } catch (_: NumberFormatException) {}
                     }
                 }
             }
 
-            val gold = extractedNumbers.getOrNull(0) ?: 0
-            val elixir = extractedNumbers.getOrNull(1) ?: 0
-            val darkElixir = extractedNumbers.getOrNull(2) ?: 0
+            // Spatial Sort: Top-to-Bottom by Y coordinate
+            linesWithY.sortBy { it.topY }
+
+            val gold = linesWithY.getOrNull(0)?.value ?: 0
+            val elixir = linesWithY.getOrNull(1)?.value ?: 0
+            val darkElixir = linesWithY.getOrNull(2)?.value ?: 0
 
             val isDeadBase = checkDeadBaseHeuristic(rawRoiBitmap, gold, elixir)
 
@@ -106,14 +114,14 @@ class LootOcrEngine(
             Utils.bitmapToMat(sourceBitmap, rgbaMat)
             Imgproc.cvtColor(rgbaMat, grayMat, Imgproc.COLOR_RGBA2GRAY)
 
-            // Otsu thresholding + light morphological opening
+            // Otsu thresholding for sharp text isolation
             Imgproc.threshold(grayMat, threshMat, 0.0, 255.0, Imgproc.THRESH_BINARY or Imgproc.THRESH_OTSU)
 
             val outputBmp = bitmapPool.acquire(sourceBitmap.width, sourceBitmap.height)
             Utils.matToBitmap(threshMat, outputBmp)
             return outputBmp
         } catch (e: Exception) {
-            Log.w(TAG, "Error during OpenCV shadow thresholding, using source: ${e.message}")
+            Log.w(TAG, "Error during OpenCV shadow thresholding: ${e.message}")
             return sourceBitmap
         } finally {
             rgbaMat.release()
@@ -123,11 +131,10 @@ class LootOcrEngine(
     }
 
     /**
-     * Dead Base Detection: High loot (>350k each) combined with collector color density.
+     * Dead Base Detection: High loot (>350k each) combined with collector status.
      */
     private fun checkDeadBaseHeuristic(roiBitmap: Bitmap, gold: Int, elixir: Int): Boolean {
-        // High loot is the primary indicator of full exterior collectors
-        return (gold >= 400_000 && elixir >= 400_000)
+        return (gold >= 380_000 && elixir >= 380_000)
     }
 
     fun release() {

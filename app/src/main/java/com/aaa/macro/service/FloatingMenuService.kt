@@ -23,6 +23,7 @@ import com.aaa.macro.MainActivity
 import com.aaa.macro.R
 import com.aaa.macro.engine.HumanGestureDispatcher
 import com.aaa.macro.engine.MacroStateMachine
+import com.aaa.macro.engine.OfflineVisionEngine
 import com.aaa.macro.engine.ResolutionScaler
 import com.aaa.macro.engine.VisionEngine
 import com.aaa.macro.ui.FloatingOverlayView

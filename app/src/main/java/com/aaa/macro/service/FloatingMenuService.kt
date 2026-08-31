@@ -26,6 +26,7 @@ import com.aaa.macro.engine.FarmingFSM
 import com.aaa.macro.engine.HumanGestureDispatcher
 import com.aaa.macro.engine.OfflineVisionEngine
 import com.aaa.macro.engine.ResolutionScaler
+import com.aaa.macro.engine.WakeManager
 import com.aaa.macro.ui.FloatingOverlayView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,8 +35,8 @@ import kotlinx.coroutines.cancel
 import org.opencv.android.OpenCVLoader
 
 /**
- * Foreground Service hosting the Floating Mini-Hub UI,
- * Cutout Safe-Area Manager, MediaProjection Engine, and Farming FSM.
+ * Enterprise Foreground Service hosting the Floating Mini-Hub UI,
+ * WakeLock Management, Cutout Safe-Area Offsets, MediaProjection Engine, and Farming FSM.
  */
 class FloatingMenuService : Service() {
 
@@ -56,6 +57,7 @@ class FloatingMenuService : Service() {
 
     private lateinit var windowManager: WindowManager
     private lateinit var mediaProjectionManager: MediaProjectionManager
+    private lateinit var wakeManager: WakeManager
 
     private var cutoutManager: CutoutManager? = null
     private var visionEngine: OfflineVisionEngine? = null
@@ -70,12 +72,12 @@ class FloatingMenuService : Service() {
 
         if (!OpenCVLoader.initDebug()) {
             Log.w(TAG, "OpenCV native library loading notice.")
-        } else {
-            Log.i(TAG, "OpenCV loaded successfully.")
         }
 
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        wakeManager = WakeManager(applicationContext)
+        wakeManager.acquireWakeLock()
 
         createNotificationChannel()
         startForegroundWithNotification()
@@ -154,7 +156,7 @@ class FloatingMenuService : Service() {
         overlay.attach()
         this.overlayView = overlay
 
-        Log.i(TAG, "All farming engines and floating overlay attached successfully.")
+        Log.i(TAG, "All enterprise farming engines and floating overlay attached successfully.")
     }
 
     private fun createNotificationChannel() {
@@ -207,6 +209,7 @@ class FloatingMenuService : Service() {
         Log.i(TAG, "FloatingMenuService onDestroy()")
         isRunning = false
 
+        wakeManager.releaseWakeLock()
         serviceScope.cancel()
 
         overlayView?.detach()

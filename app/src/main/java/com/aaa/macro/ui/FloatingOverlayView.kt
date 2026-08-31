@@ -23,13 +23,13 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 /**
- * Modern Light Floating Mini-Hub Controller (Macrorify-Style Overlay).
+ * Enterprise Light Floating Mini-Hub Controller.
  *
  * Implements:
- * - Docked minimal floating pill widget
- * - Expanded full control panel with Light Theme styling
+ * - Docked / Expanded draggable overlay widget
  * - Army Deployment Preset dropdown selector
- * - Plus/Minus step controls for Min Gold and Min Elixir
+ * - Gold, Elixir, and Dark Elixir (+/-) steppers
+ * - Auto Wall-Dump toggle
  * - Touch-drag movement across screen boundaries
  */
 class FloatingOverlayView(
@@ -68,7 +68,8 @@ class FloatingOverlayView(
             type = windowType
             flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-                    WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
+                    WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED or
+                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
             format = PixelFormat.TRANSLUCENT
             width = WindowManager.LayoutParams.WRAP_CONTENT
             height = WindowManager.LayoutParams.WRAP_CONTENT
@@ -97,40 +98,19 @@ class FloatingOverlayView(
 
     @SuppressLint("ClickableViewAccessibility")
     private fun setupListeners() {
-        // Dragging handler for expanded header bar
-        binding.headerDragBar.setOnTouchListener { _, event ->
-            handleDragTouch(event)
-        }
+        binding.headerDragBar.setOnTouchListener { _, event -> handleDragTouch(event) }
+        binding.dockedPillLayout.setOnTouchListener { _, event -> handleDragTouch(event) }
 
-        // Dragging handler for docked pill
-        binding.dockedPillLayout.setOnTouchListener { _, event ->
-            handleDragTouch(event)
-        }
+        binding.btnMinimize.setOnClickListener { toggleExpanded(false) }
+        binding.btnDockedExpand.setOnClickListener { toggleExpanded(true) }
+        binding.dockedPillLayout.setOnClickListener { if (!isDragging) toggleExpanded(true) }
 
-        // Minimize to docked pill
-        binding.btnMinimize.setOnClickListener {
-            toggleExpanded(false)
-        }
-
-        // Expand docked pill
-        binding.btnDockedExpand.setOnClickListener {
-            toggleExpanded(true)
-        }
-
-        binding.dockedPillLayout.setOnClickListener {
-            if (!isDragging) {
-                toggleExpanded(true)
-            }
-        }
-
-        // Close Hub
         binding.btnClose.setOnClickListener {
             farmingFSM.stop()
             detach()
             onCloseRequested()
         }
 
-        // Main Toggle Start/Pause
         binding.btnToggleMacro.setOnClickListener {
             if (farmingFSM.state.value == MacroState.IDLE) {
                 farmingFSM.start()
@@ -147,33 +127,47 @@ class FloatingOverlayView(
             }
         }
 
-        // Emergency Pause
-        binding.btnEmergencyPause.setOnClickListener {
-            farmingFSM.pause()
-        }
+        binding.btnEmergencyPause.setOnClickListener { farmingFSM.pause() }
 
-        // Gold +/- 50k Controls
+        // Gold +/- 50k
         binding.btnGoldMinus.setOnClickListener {
-            val current = farmingFSM.lootConfig.minGold
-            farmingFSM.lootConfig.minGold = (current - 50_000).coerceAtLeast(0)
+            val cur = farmingFSM.lootConfig.minGold
+            farmingFSM.lootConfig.minGold = (cur - 50_000).coerceAtLeast(0)
             updateLootThresholdText()
         }
         binding.btnGoldPlus.setOnClickListener {
-            val current = farmingFSM.lootConfig.minGold
-            farmingFSM.lootConfig.minGold = (current + 50_000).coerceAtMost(2_000_000)
+            val cur = farmingFSM.lootConfig.minGold
+            farmingFSM.lootConfig.minGold = (cur + 50_000).coerceAtMost(2_000_000)
             updateLootThresholdText()
         }
 
-        // Elixir +/- 50k Controls
+        // Elixir +/- 50k
         binding.btnElixirMinus.setOnClickListener {
-            val current = farmingFSM.lootConfig.minElixir
-            farmingFSM.lootConfig.minElixir = (current - 50_000).coerceAtLeast(0)
+            val cur = farmingFSM.lootConfig.minElixir
+            farmingFSM.lootConfig.minElixir = (cur - 50_000).coerceAtLeast(0)
             updateLootThresholdText()
         }
         binding.btnElixirPlus.setOnClickListener {
-            val current = farmingFSM.lootConfig.minElixir
-            farmingFSM.lootConfig.minElixir = (current + 50_000).coerceAtMost(2_000_000)
+            val cur = farmingFSM.lootConfig.minElixir
+            farmingFSM.lootConfig.minElixir = (cur + 50_000).coerceAtMost(2_000_000)
             updateLootThresholdText()
+        }
+
+        // Dark Elixir +/- 500
+        binding.btnDeMinus.setOnClickListener {
+            val cur = farmingFSM.lootConfig.minDarkElixir
+            farmingFSM.lootConfig.minDarkElixir = (cur - 500).coerceAtLeast(0)
+            updateLootThresholdText()
+        }
+        binding.btnDePlus.setOnClickListener {
+            val cur = farmingFSM.lootConfig.minDarkElixir
+            farmingFSM.lootConfig.minDarkElixir = (cur + 500).coerceAtMost(20_000)
+            updateLootThresholdText()
+        }
+
+        // Wall Dump Toggle
+        binding.cbWallDump.setOnCheckedChangeListener { _, isChecked ->
+            farmingFSM.lootConfig.enableWallDump = isChecked
         }
 
         updateLootThresholdText()
@@ -182,6 +176,7 @@ class FloatingOverlayView(
     private fun updateLootThresholdText() {
         binding.tvTargetGoldK.text = "${farmingFSM.lootConfig.minGold / 1000}k"
         binding.tvTargetElixirK.text = "${farmingFSM.lootConfig.minElixir / 1000}k"
+        binding.tvTargetDeK.text = "%.1fk".format(farmingFSM.lootConfig.minDarkElixir / 1000.0)
     }
 
     private fun toggleExpanded(expand: Boolean) {
@@ -255,6 +250,7 @@ class FloatingOverlayView(
             farmingFSM.latestLoot.collectLatest { loot ->
                 binding.tvLiveGold.text = "%,d".format(loot.gold)
                 binding.tvLiveElixir.text = "%,d".format(loot.elixir)
+                binding.tvLiveDe.text = "%,d".format(loot.darkElixir)
             }
         }
 

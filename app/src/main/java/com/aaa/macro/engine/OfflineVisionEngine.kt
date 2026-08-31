@@ -7,12 +7,8 @@ import android.graphics.Color
 import android.graphics.Rect
 import android.media.projection.MediaProjection
 import android.util.Log
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.Text
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.aaa.macro.model.LootSnapshot
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.opencv.android.Utils
 import org.opencv.core.Core
@@ -25,15 +21,15 @@ import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.channels.FileChannel
-import kotlin.coroutines.resume
 
 /**
- * 100% On-Device Offline Edge-AI Vision Pipeline.
+ * Enterprise 3-Tier Offline Edge-AI Vision Pipeline.
  *
- * Implements a 3-Tier Zero-Allocation Detection Stack:
- * - Tier 1: Fast Color & Geometry Heuristic (<1ms latency, 0 allocation)
- * - Tier 2: On-Device TFLite Quantized Classifier (128x128 quantized tensor inference)
- * - Tier 3: Localized On-Device ML Kit OCR (Strictly cropped ~180x50 Loot Box)
+ * Combines:
+ * - BitmapPool for zero-allocation memory recycling
+ * - Tier 1: Fast Color & Geometry Sampling (<1ms, 0 allocations)
+ * - Tier 2: On-Device TFLite Quantized Classifier (128x128)
+ * - Tier 3: LootOcrEngine with Otsu Drop-Shadow Removal
  */
 class OfflineVisionEngine(
     private val context: Context,
@@ -45,14 +41,15 @@ class OfflineVisionEngine(
         private const val TFLITE_INPUT_SIZE = 128
     }
 
+    val bitmapPool = BitmapPool(poolSize = 3)
     val captureManager = ScreenCaptureManager(context, resolutionScaler)
-    private val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+    val lootOcrEngine = LootOcrEngine(bitmapPool)
 
     private var tfliteInterpreter: Interpreter? = null
     private val inputByteBuffer: ByteBuffer = ByteBuffer.allocateDirect(1 * TFLITE_INPUT_SIZE * TFLITE_INPUT_SIZE * 3).apply {
         order(ByteOrder.nativeOrder())
     }
-    private val outputProbArray = Array(1) { FloatArray(4) } // 0: HOME, 1: CLOUDS, 2: MATCH_FOUND, 3: END_SUMMARY
+    private val outputProbArray = Array(1) { FloatArray(4) }
 
     val isInitialized: Boolean
         get() = captureManager.isInitialized
@@ -74,9 +71,9 @@ class OfflineVisionEngine(
                 setNumThreads(2)
             }
             tfliteInterpreter = Interpreter(modelBuffer, options)
-            Log.i(TAG, "TFLite state classifier loaded successfully from assets.")
+            Log.i(TAG, "TFLite model loaded.")
         } catch (e: Exception) {
-            Log.w(TAG, "TFLite interpreter initialization notice (Falling back to Tier-1 heuristic): ${e.message}")
+            Log.w(TAG, "TFLite notice (Falling back to Tier-1 heuristic): ${e.message}")
             tfliteInterpreter = null
         }
     }
@@ -91,25 +88,19 @@ class OfflineVisionEngine(
     }
 
     /**
-     * 3-Tier Multi-Stage Screen Classification.
-     *
-     * @return Classified DetectedScreenState.
+     * Classifies the current game state via 3-Tier Vision.
      */
     fun classifyCurrentScreen(): DetectedScreenState {
         val fullBitmap = captureManager.acquireLatestBitmap() ?: return DetectedScreenState.UNKNOWN
         try {
-            // ==================== TIER 1: Fast Color Sampling (<1ms) ====================
-            val tier1State = classifyTier1FastColor(fullBitmap)
-            if (tier1State != DetectedScreenState.UNKNOWN) {
-                return tier1State
-            }
+            // Tier 1: Fast Color Sampling
+            val t1 = classifyTier1(fullBitmap)
+            if (t1 != DetectedScreenState.UNKNOWN) return t1
 
-            // ==================== TIER 2: On-Device TFLite Classifier ====================
+            // Tier 2: TFLite Classifier
             if (tfliteInterpreter != null) {
-                val tier2State = classifyTier2TFLite(fullBitmap)
-                if (tier2State != DetectedScreenState.UNKNOWN) {
-                    return tier2State
-                }
+                val t2 = classifyTier2(fullBitmap)
+                if (t2 != DetectedScreenState.UNKNOWN) return t2
             }
 
             return DetectedScreenState.UNKNOWN
@@ -118,37 +109,34 @@ class OfflineVisionEngine(
         }
     }
 
-    /**
-     * Tier 1: Fast Pixel Color Sampling across downscaled thumbnail.
-     */
-    private fun classifyTier1FastColor(fullBitmap: Bitmap): DetectedScreenState {
+    private fun classifyTier1(fullBitmap: Bitmap): DetectedScreenState {
         var thumbnail: Bitmap? = null
         try {
             thumbnail = Bitmap.createScaledBitmap(fullBitmap, 160, 90, false)
 
-            // 1. Cloud Screen (High uniform luminance at center)
+            // Cloud Screen Check
             val c1 = thumbnail.getPixel(80, 45)
             val c2 = thumbnail.getPixel(60, 45)
             val c3 = thumbnail.getPixel(100, 45)
-            if (isCloudLuminance(c1) && isCloudLuminance(c2) && isCloudLuminance(c3)) {
+            if (isCloudPixel(c1) && isCloudPixel(c2) && isCloudPixel(c3)) {
                 return DetectedScreenState.CLOUDS_SEARCHING
             }
 
-            // 2. Next Button (Bottom Right: x=145, y=75)
+            // Next Button Check (Bottom Right)
             val nextPx = thumbnail.getPixel(145, 75)
             val nR = Color.red(nextPx)
             val nG = Color.green(nextPx)
             val nB = Color.blue(nextPx)
             val isNextOrange = (nR > 160 && nG in 95..185 && nB < 85)
 
-            // 3. Attack Button (Bottom Left: x=10, y=78)
+            // Attack Button Check (Bottom Left)
             val atkPx = thumbnail.getPixel(10, 78)
             val aR = Color.red(atkPx)
             val aG = Color.green(atkPx)
             val aB = Color.blue(atkPx)
             val isAttackRed = (aR > 145 && aG < 95 && aB < 95)
 
-            // 4. Return Home Button (Center Bottom: x=80, y=76)
+            // End Summary / Return Home Check
             val endPx = thumbnail.getPixel(80, 76)
             val isEndSummary = (Color.red(endPx) in 50..180 && Color.green(endPx) in 120..220 && Color.blue(endPx) in 180..255)
 
@@ -159,17 +147,13 @@ class OfflineVisionEngine(
                 else -> DetectedScreenState.UNKNOWN
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error in Tier-1 classification", e)
             return DetectedScreenState.UNKNOWN
         } finally {
             thumbnail?.recycle()
         }
     }
 
-    /**
-     * Tier 2: 128x128 On-Device Quantized TFLite Inference.
-     */
-    private fun classifyTier2TFLite(fullBitmap: Bitmap): DetectedScreenState {
+    private fun classifyTier2(fullBitmap: Bitmap): DetectedScreenState {
         val interpreter = tfliteInterpreter ?: return DetectedScreenState.UNKNOWN
         var scaled128: Bitmap? = null
         try {
@@ -183,7 +167,6 @@ class OfflineVisionEngine(
             for (i in 0 until TFLITE_INPUT_SIZE) {
                 for (j in 0 until TFLITE_INPUT_SIZE) {
                     val pixel = intValues[pixelIndex++]
-                    // Normalize RGB values into [0, 255] or float
                     inputByteBuffer.put((Color.red(pixel) and 0xFF).toByte())
                     inputByteBuffer.put((Color.green(pixel) and 0xFF).toByte())
                     inputByteBuffer.put((Color.blue(pixel) and 0xFF).toByte())
@@ -191,7 +174,6 @@ class OfflineVisionEngine(
             }
 
             interpreter.run(inputByteBuffer, outputProbArray)
-
             val probs = outputProbArray[0]
             var maxIdx = 0
             var maxProb = probs[0]
@@ -213,14 +195,13 @@ class OfflineVisionEngine(
             }
             return DetectedScreenState.UNKNOWN
         } catch (e: Exception) {
-            Log.e(TAG, "Error in Tier-2 TFLite inference", e)
             return DetectedScreenState.UNKNOWN
         } finally {
             scaled128?.recycle()
         }
     }
 
-    private fun isCloudLuminance(pixel: Int): Boolean {
+    private fun isCloudPixel(pixel: Int): Boolean {
         val r = Color.red(pixel)
         val g = Color.green(pixel)
         val b = Color.blue(pixel)
@@ -230,56 +211,19 @@ class OfflineVisionEngine(
     }
 
     /**
-     * Tier 3: Localized On-Device OCR.
-     * Crops strictly the small ~180x50 loot area to parse Gold and Elixir numbers offline.
+     * Tier 3: Localized Loot ROI OCR with Shadow Elimination.
      */
-    suspend fun readLootValues(
-        cropArea: Rect
-    ): Pair<Int, Int> = withContext(Dispatchers.Default) {
-        val roiBitmap = captureManager.acquireRoiBitmap(cropArea) ?: return@withContext Pair(0, 0)
+    suspend fun readLootMetrics(cropArea: Rect): LootSnapshot = withContext(Dispatchers.Default) {
+        val roiBitmap = captureManager.acquireRoiBitmap(cropArea) ?: return@withContext LootSnapshot()
         try {
-            val image = InputImage.fromBitmap(roiBitmap, 0)
-
-            val visionText = suspendCancellableCoroutine<Text?> { continuation ->
-                textRecognizer.process(image)
-                    .addOnSuccessListener { result ->
-                        if (continuation.isActive) continuation.resume(result)
-                    }
-                    .addOnFailureListener { error ->
-                        Log.w(TAG, "ML Kit Local OCR error: ${error.message}")
-                        if (continuation.isActive) continuation.resume(null)
-                    }
-            } ?: return@withContext Pair(0, 0)
-
-            val numbers = mutableListOf<Int>()
-            for (block in visionText.textBlocks) {
-                for (line in block.lines) {
-                    val raw = line.text
-                    val cleaned = raw.replace(Regex("[^0-9]"), "")
-                    if (cleaned.isNotEmpty()) {
-                        try {
-                            val parsedVal = cleaned.toInt()
-                            if (parsedVal in 100..20000000) {
-                                numbers.add(parsedVal)
-                            }
-                        } catch (_: NumberFormatException) {}
-                    }
-                }
-            }
-
-            val gold = numbers.getOrNull(0) ?: 0
-            val elixir = numbers.getOrNull(1) ?: 0
-            return@withContext Pair(gold, elixir)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in Tier-3 Localized OCR", e)
-            return@withContext Pair(0, 0)
+            return@withContext lootOcrEngine.parseLootMetrics(roiBitmap)
         } finally {
             roiBitmap.recycle()
         }
     }
 
     /**
-     * Captures the screen directly as an OpenCV BGR Mat.
+     * Captures current screen frame as OpenCV BGR Mat.
      */
     fun captureScreenMat(grayscale: Boolean = false): Mat? {
         val bitmap = captureManager.acquireLatestBitmap() ?: return null
@@ -304,15 +248,10 @@ class OfflineVisionEngine(
     }
 
     /**
-     * Template matching with TM_CCOEFF_NORMED and strict memory disposal.
+     * Template matching with TM_CCOEFF_NORMED.
      */
-    fun findTemplate(
-        screenMat: Mat,
-        templateMat: Mat,
-        threshold: Float = 0.85f
-    ): Point? {
+    fun findTemplate(screenMat: Mat, templateMat: Mat, threshold: Float = 0.85f): Point? {
         if (screenMat.empty() || templateMat.empty()) return null
-
         val scaledTemplate = resolutionScaler.scaleTemplate(templateMat)
 
         if (screenMat.cols() < scaledTemplate.cols() || screenMat.rows() < scaledTemplate.rows()) {
@@ -328,8 +267,7 @@ class OfflineVisionEngine(
             Imgproc.matchTemplate(screenMat, scaledTemplate, resultMat, Imgproc.TM_CCOEFF_NORMED)
             val minMaxResult = Core.minMaxLoc(resultMat)
 
-            val maxVal = minMaxResult.maxVal.toFloat()
-            if (maxVal >= threshold) {
+            if (minMaxResult.maxVal.toFloat() >= threshold) {
                 val matchLoc = minMaxResult.maxLoc
                 val centerX = matchLoc.x + scaledTemplate.cols() / 2.0
                 val centerY = matchLoc.y + scaledTemplate.rows() / 2.0
@@ -337,7 +275,6 @@ class OfflineVisionEngine(
             }
             return null
         } catch (e: Exception) {
-            Log.e(TAG, "Exception in findTemplate", e)
             return null
         } finally {
             resultMat.release()
@@ -347,6 +284,8 @@ class OfflineVisionEngine(
 
     fun release() {
         captureManager.release()
+        bitmapPool.clear()
+        lootOcrEngine.release()
         try {
             tfliteInterpreter?.close()
             tfliteInterpreter = null

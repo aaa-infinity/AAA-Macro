@@ -54,10 +54,10 @@
             app:tint="@color/text_secondary" />
     </LinearLayout>
 
-    <!-- Expanded Mini-Hub Controller (Full Modern Light Card) -->
+    <!-- Expanded Mini-Hub Controller (Full Enterprise Light Card) -->
     <LinearLayout
         android:id="@+id/expanded_card_layout"
-        android:layout_width="320dp"
+        android:layout_width="330dp"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_card_light"
         android:elevation="8dp"
@@ -87,7 +87,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="AAA Farming Macro"
+                    android:text="AAA Macro Enterprise"
                     android:textColor="@color/text_primary"
                     android:textSize="14sp"
                     android:textStyle="bold" />
@@ -95,7 +95,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Professional Standard Battle Edition"
+                    android:text="Ultimate Multi-Strategy Engine"
                     android:textColor="@color/text_secondary"
                     android:textSize="10sp" />
             </LinearLayout>
@@ -124,12 +124,12 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="8dp"
             android:background="@drawable/bg_status_badge_light"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingHorizontal="10dp"
-            android:paddingVertical="7dp">
+            android:paddingVertical="6dp">
 
             <TextView
                 android:layout_width="wrap_content"
@@ -159,117 +159,145 @@
                 android:textSize="11sp" />
         </LinearLayout>
 
-        <!-- Live Detected Loot Readout -->
+        <!-- Live Detected Loot Readout (Gold, Elixir, DE) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="6dp"
             android:orientation="horizontal">
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="4dp"
+                android:layout_marginEnd="3dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_status_badge_light"
                 android:gravity="center_vertical"
-                android:paddingHorizontal="8dp"
-                android:paddingVertical="6dp">
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="4dp">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="G:"
                     android:textColor="@color/accent_gold"
-                    android:textSize="12sp"
+                    android:textSize="11sp"
                     android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/tv_live_gold"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
+                    android:layout_marginStart="2dp"
                     android:text="0"
                     android:textColor="@color/text_primary"
-                    android:textSize="12sp"
+                    android:textSize="11sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
+                android:layout_marginHorizontal="3dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_status_badge_light"
                 android:gravity="center_vertical"
-                android:paddingHorizontal="8dp"
-                android:paddingVertical="6dp">
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="4dp">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="E:"
                     android:textColor="@color/accent_elixir"
-                    android:textSize="12sp"
+                    android:textSize="11sp"
                     android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/tv_live_elixir"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
+                    android:layout_marginStart="2dp"
                     android:text="0"
                     android:textColor="@color/text_primary"
-                    android:textSize="12sp"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="3dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_status_badge_light"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="4dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="DE:"
+                    android:textColor="@color/accent_blue"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tv_live_de"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="2dp"
+                    android:text="0"
+                    android:textColor="@color/text_primary"
+                    android:textSize="11sp"
                     android:textStyle="bold" />
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Army Deployment Routine Spinner -->
+        <!-- Army Strategy Spinner -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="ARMY DEPLOYMENT PRESET"
+            android:layout_marginTop="8dp"
+            android:text="ARMY STRATEGY"
             android:textColor="@color/text_secondary"
-            android:textSize="11sp"
+            android:textSize="10sp"
             android:textStyle="bold" />
 
         <Spinner
             android:id="@+id/spinner_army_preset"
             android:layout_width="match_parent"
-            android:layout_height="38dp"
-            android:layout_marginTop="4dp"
+            android:layout_height="36dp"
+            android:layout_marginTop="2dp"
             android:background="@drawable/bg_status_badge_light"
             android:paddingHorizontal="6dp" />
 
-        <!-- Target Loot Controls (Plus / Minus Steppers) -->
+        <!-- Target Loot Controls (Gold, Elixir, DE Steppers) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="8dp"
             android:orientation="horizontal">
 
-            <!-- Gold Threshold -->
+            <!-- Gold Stepper -->
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="4dp"
+                android:layout_marginEnd="2dp"
                 android:layout_weight="1"
                 android:orientation="vertical">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="MIN GOLD (k)"
+                    android:text="GOLD"
                     android:textColor="@color/accent_gold"
-                    android:textSize="10sp"
+                    android:textSize="9sp"
                     android:textStyle="bold" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="36dp"
-                    android:layout_marginTop="2dp"
+                    android:layout_height="32dp"
                     android:background="@drawable/bg_status_badge_light"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
@@ -277,12 +305,12 @@
                     <Button
                         android:id="@+id/btn_gold_minus"
                         style="@style/Widget.Material3.Button.TextButton"
-                        android:layout_width="32dp"
+                        android:layout_width="26dp"
                         android:layout_height="match_parent"
                         android:padding="0dp"
                         android:text="-"
                         android:textColor="@color/text_primary"
-                        android:textSize="16sp" />
+                        android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/tv_target_gold_k"
@@ -292,41 +320,40 @@
                         android:gravity="center"
                         android:text="450k"
                         android:textColor="@color/text_primary"
-                        android:textSize="12sp"
+                        android:textSize="11sp"
                         android:textStyle="bold" />
 
                     <Button
                         android:id="@+id/btn_gold_plus"
                         style="@style/Widget.Material3.Button.TextButton"
-                        android:layout_width="32dp"
+                        android:layout_width="26dp"
                         android:layout_height="match_parent"
                         android:padding="0dp"
                         android:text="+"
                         android:textColor="@color/text_primary"
-                        android:textSize="16sp" />
+                        android:textSize="14sp" />
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- Elixir Threshold -->
+            <!-- Elixir Stepper -->
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
+                android:layout_marginHorizontal="2dp"
                 android:layout_weight="1"
                 android:orientation="vertical">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="MIN ELIXIR (k)"
+                    android:text="ELIXIR"
                     android:textColor="@color/accent_elixir"
-                    android:textSize="10sp"
+                    android:textSize="9sp"
                     android:textStyle="bold" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="36dp"
-                    android:layout_marginTop="2dp"
+                    android:layout_height="32dp"
                     android:background="@drawable/bg_status_badge_light"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
@@ -334,12 +361,12 @@
                     <Button
                         android:id="@+id/btn_elixir_minus"
                         style="@style/Widget.Material3.Button.TextButton"
-                        android:layout_width="32dp"
+                        android:layout_width="26dp"
                         android:layout_height="match_parent"
                         android:padding="0dp"
                         android:text="-"
                         android:textColor="@color/text_primary"
-                        android:textSize="16sp" />
+                        android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/tv_target_elixir_k"
@@ -349,53 +376,120 @@
                         android:gravity="center"
                         android:text="450k"
                         android:textColor="@color/text_primary"
-                        android:textSize="12sp"
+                        android:textSize="11sp"
                         android:textStyle="bold" />
 
                     <Button
                         android:id="@+id/btn_elixir_plus"
                         style="@style/Widget.Material3.Button.TextButton"
-                        android:layout_width="32dp"
+                        android:layout_width="26dp"
                         android:layout_height="match_parent"
                         android:padding="0dp"
                         android:text="+"
                         android:textColor="@color/text_primary"
-                        android:textSize="16sp" />
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- DE Stepper -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="2dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="DARK ELIXIR"
+                    android:textColor="@color/accent_blue"
+                    android:textSize="9sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="32dp"
+                    android:background="@drawable/bg_status_badge_light"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btn_de_minus"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="26dp"
+                        android:layout_height="match_parent"
+                        android:padding="0dp"
+                        android:text="-"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:id="@+id/tv_target_de_k"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:text="3.0k"
+                        android:textColor="@color/text_primary"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <Button
+                        android:id="@+id/btn_de_plus"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="26dp"
+                        android:layout_height="match_parent"
+                        android:padding="0dp"
+                        android:text="+"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp" />
                 </LinearLayout>
             </LinearLayout>
         </LinearLayout>
+
+        <!-- Wall Dump Toggle Switch -->
+        <CheckBox
+            android:id="@+id/cb_wall_dump"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:checked="true"
+            android:text="Auto Wall Dump (>90% Storages)"
+            android:textColor="@color/text_primary"
+            android:textSize="11sp" />
 
         <!-- Main Action Controller Buttons -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="8dp"
             android:orientation="horizontal">
 
             <Button
                 android:id="@+id/btn_toggle_macro"
                 style="@style/Widget.Material3.Button"
                 android:layout_width="0dp"
-                android:layout_height="44dp"
+                android:layout_height="42dp"
                 android:layout_marginEnd="4dp"
                 android:layout_weight="1"
                 android:backgroundTint="@color/accent_green"
                 android:text="START FARMING"
                 android:textColor="#FFFFFF"
-                android:textSize="13sp"
+                android:textSize="12sp"
                 android:textStyle="bold" />
 
             <Button
                 android:id="@+id/btn_emergency_pause"
                 style="@style/Widget.Material3.Button.TonalButton"
                 android:layout_width="0dp"
-                android:layout_height="44dp"
+                android:layout_height="42dp"
                 android:layout_marginStart="4dp"
                 android:layout_weight="1"
                 android:backgroundTint="@color/accent_red_light"
                 android:text="PAUSE (VOL-)"
                 android:textColor="@color/accent_red"
-                android:textSize="12sp"
+                android:textSize="11sp"
                 android:textStyle="bold" />
         </LinearLayout>
 

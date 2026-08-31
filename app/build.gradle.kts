@@ -8,7 +8,7 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.aaa.macro"
+        applicationId = "com.syshelper.service.macro"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
@@ -80,7 +80,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
 
-    // AndroidX & UI
+    // AndroidX & Material Design 3
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
@@ -88,12 +88,12 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-service:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
 
-    // On-Device Edge ML: TensorFlow Lite (Zero-Cloud Offline AI)
+    // On-Device Edge ML: TensorFlow Lite
     implementation("org.tensorflow:tensorflow-lite:2.14.0")
 
-    // Computer Vision - OpenCV Android SDK
+    // Local Computer Vision: OpenCV Android SDK
     implementation("com.quickbirdstudios:opencv:4.5.3.0")
 
-    // Local On-Device OCR - Google ML Kit Text Recognition (100% Offline)
+    // Local On-Device OCR: Google ML Kit (100% Offline)
     implementation("com.google.mlkit:text-recognition:16.0.0")
 }

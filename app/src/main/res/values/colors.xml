@@ -8,10 +8,13 @@
     
     <!-- Background & Surface (Light Theme) -->
     <color name="background_light">#F8FAFC</color>
+    <color name="background_dark">#1E293B</color>
     <color name="surface_white">#FFFFFF</color>
+    <color name="surface_card">#FFFFFF</color>
     <color name="surface_card_light">#FFFFFF</color>
     <color name="surface_card_stroke">#E2E8F0</color>
     <color name="surface_subtle">#F1F5F9</color>
+    <color name="surface_dark">#1E293B</color>
 
     <!-- Slate Typography -->
     <color name="text_primary">#1E293B</color>

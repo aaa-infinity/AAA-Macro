@@ -4,7 +4,6 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
 import android.graphics.PointF
-import android.os.Build
 import android.util.Log
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -17,11 +16,13 @@ import kotlin.math.sqrt
 /**
  * Production-Grade Anti-Detection Gesture Engine.
  *
- * Implements non-linear stochastic input simulation:
- * - Gaussian distribution targeting (Box-Muller transform / nextGaussian)
- * - Micro-jitter on tap coordinates
- * - Variable press duration (40ms - 85ms)
- * - Cubic Bézier curve trajectory interpolation for swipes
+ * Implements advanced non-linear stochastic input simulation:
+ * - Gaussian distribution targeting (\mu = 0, \sigma = 2.5)
+ * - Touch Micro-Drift Physics (1-2px sub-pixel drift simulating flesh deformation)
+ * - Stochastic tap hold durations (40ms - 80ms)
+ * - Multi-touch simultaneous troop deployment across multiple coordinate paths
+ * - Pinch-to-zoom camera calibration routine
+ * - Cubic Bézier curve trajectory interpolation for swipes & drags
  * - Stochastic non-blocking delays with randomized variance
  */
 class HumanGestureDispatcher(
@@ -34,7 +35,7 @@ class HumanGestureDispatcher(
     private val random = Random()
 
     /**
-     * Executes a humanized tap at target (x, y) with Gaussian jitter and variable hold duration.
+     * Executes a humanized tap with Gaussian jitter, Touch Micro-Drift physics, and variable hold duration.
      *
      * @param x Target center X coordinate.
      * @param y Target center Y coordinate.
@@ -56,18 +57,24 @@ class HumanGestureDispatcher(
         val gaussianX = (random.nextGaussian() * 2.5).toFloat()
         val gaussianY = (random.nextGaussian() * 2.5).toFloat()
 
-        // Clamp offset to jitterRadius
         val clampedX = gaussianX.coerceIn(-jitterRadius, jitterRadius)
         val clampedY = gaussianY.coerceIn(-jitterRadius, jitterRadius)
 
-        val targetX = (x + clampedX).coerceAtLeast(1f)
-        val targetY = (y + clampedY).coerceAtLeast(1f)
+        val startX = (x + clampedX).coerceAtLeast(1f)
+        val startY = (y + clampedY).coerceAtLeast(1f)
 
-        // Randomized human tap hold duration (40ms - 85ms)
-        val holdDuration = (40L + random.nextInt(46)).coerceIn(40L, 85L)
+        // Micro-Drift Physics: 1-2px displacement during touch contact simulating flesh movement
+        val driftAngle = random.nextDouble() * 2.0 * Math.PI
+        val driftDist = (1.0 + random.nextDouble() * 1.5).toFloat() // 1.0px to 2.5px
+        val endX = (startX + driftDist * cos(driftAngle).toFloat()).coerceAtLeast(1f)
+        val endY = (startY + driftDist * sin(driftAngle).toFloat()).coerceAtLeast(1f)
+
+        // Randomized human tap hold duration (40ms - 80ms)
+        val holdDuration = (40L + random.nextInt(41)).coerceIn(40L, 80L)
 
         val path = Path().apply {
-            moveTo(targetX, targetY)
+            moveTo(startX, startY)
+            lineTo(endX, endY)
         }
 
         val stroke = GestureDescription.StrokeDescription(path, 0, holdDuration)
@@ -77,14 +84,83 @@ class HumanGestureDispatcher(
     }
 
     /**
-     * Executes a humanized swipe using a cubic Bézier curve with randomized control anchors.
+     * Executes multi-touch simultaneous troop deployment across multiple touch points.
+     * Builds concurrent GestureDescription.StrokeDescription paths for multi-finger deployment.
      *
-     * @param startX Starting X coordinate.
-     * @param startY Starting Y coordinate.
-     * @param endX Ending X coordinate.
-     * @param endY Ending Y coordinate.
-     * @param durationMs Base duration of the swipe gesture in milliseconds.
-     * @return True if gesture was successfully dispatched and completed.
+     * @param points List of target drop coordinates.
+     * @return True if multi-touch gesture dispatched successfully.
+     */
+    suspend fun humanMultiTouchDeploy(points: List<PointF>): Boolean {
+        val service = serviceProvider()
+        if (service == null || points.isEmpty()) {
+            return false
+        }
+
+        val builder = GestureDescription.Builder()
+        // Max 10 concurrent strokes supported by Android Accessibility
+        val safePoints = points.take(10)
+
+        for (pt in safePoints) {
+            val gaussianX = (random.nextGaussian() * 2.0).toFloat().coerceIn(-4f, 4f)
+            val gaussianY = (random.nextGaussian() * 2.0).toFloat().coerceIn(-4f, 4f)
+            val sx = (pt.x + gaussianX).coerceAtLeast(1f)
+            val sy = (pt.y + gaussianY).coerceAtLeast(1f)
+
+            val driftDist = (1.0 + random.nextDouble()).toFloat()
+            val driftAngle = random.nextDouble() * 2.0 * Math.PI
+            val ex = (sx + driftDist * cos(driftAngle).toFloat()).coerceAtLeast(1f)
+            val ey = (sy + driftDist * sin(driftAngle).toFloat()).coerceAtLeast(1f)
+
+            val holdDuration = (50L + random.nextInt(35)).coerceIn(45L, 85L)
+            // Micro stagger between finger contacts (0-15ms)
+            val startTime = random.nextInt(15).toLong()
+
+            val path = Path().apply {
+                moveTo(sx, sy)
+                lineTo(ex, ey)
+            }
+
+            builder.addStroke(GestureDescription.StrokeDescription(path, startTime, holdDuration))
+        }
+
+        val gesture = builder.build()
+        return dispatchGestureSuspending(service, gesture)
+    }
+
+    /**
+     * Executes a two-finger pinch-to-zoom-out gesture to normalize game camera framing.
+     */
+    suspend fun pinchZoomOut(
+        centerX: Float = 960f,
+        centerY: Float = 540f,
+        span: Float = 350f,
+        durationMs: Long = 400L
+    ): Boolean {
+        val service = serviceProvider() ?: return false
+
+        val path1 = Path().apply {
+            moveTo(centerX - span, centerY - span * 0.5f)
+            lineTo(centerX - 60f, centerY - 30f)
+        }
+
+        val path2 = Path().apply {
+            moveTo(centerX + span, centerY + span * 0.5f)
+            lineTo(centerX + 60f, centerY + 30f)
+        }
+
+        val stroke1 = GestureDescription.StrokeDescription(path1, 0, durationMs)
+        val stroke2 = GestureDescription.StrokeDescription(path2, 0, durationMs)
+
+        val gesture = GestureDescription.Builder()
+            .addStroke(stroke1)
+            .addStroke(stroke2)
+            .build()
+
+        return dispatchGestureSuspending(service, gesture)
+    }
+
+    /**
+     * Executes a humanized swipe using a cubic Bézier curve with randomized control anchors.
      */
     suspend fun humanSwipe(
         startX: Float,
@@ -101,7 +177,6 @@ class HumanGestureDispatcher(
 
         val actualDuration = (durationMs + random.nextInt(60) - 30).coerceAtLeast(150L)
 
-        // Calculate vector and perpendicular direction
         val dx = endX - startX
         val dy = endY - startY
         val dist = sqrt((dx * dx + dy * dy).toDouble()).toFloat()
@@ -117,18 +192,16 @@ class HumanGestureDispatcher(
         val curveMagnitude1 = ((random.nextGaussian() * 18.0).toFloat()).coerceIn(-45f, 45f)
         val curveMagnitude2 = ((random.nextGaussian() * 18.0).toFloat()).coerceIn(-45f, 45f)
 
-        // Control point 1 (~30% along the path)
         val p1x = startX + dx * 0.3f + perpX * curveMagnitude1
         val p1y = startY + dy * 0.3f + perpY * curveMagnitude1
 
-        // Control point 2 (~70% along the path)
         val p2x = startX + dx * 0.7f + perpX * curveMagnitude2
         val p2y = startY + dy * 0.7f + perpY * curveMagnitude2
 
-        // Build smooth Cubic Bézier Path
-        val path = Path()
-        path.moveTo(startX, startY)
-        path.cubicTo(p1x, p1y, p2x, p2y, endX, endY)
+        val path = Path().apply {
+            moveTo(startX, startY)
+            cubicTo(p1x, p1y, p2x, p2y, endX, endY)
+        }
 
         val stroke = GestureDescription.StrokeDescription(path, 0, actualDuration)
         val gesture = GestureDescription.Builder().addStroke(stroke).build()
@@ -138,9 +211,6 @@ class HumanGestureDispatcher(
 
     /**
      * Non-blocking stochastic sleep using coroutines.
-     *
-     * @param baseMs Base delay in milliseconds.
-     * @param varianceMs Random deviation (+/- variance).
      */
     suspend fun humanSleep(baseMs: Long, varianceMs: Long = 50L) {
         val variance = if (varianceMs > 0) {
@@ -152,9 +222,6 @@ class HumanGestureDispatcher(
         delay(totalDelay)
     }
 
-    /**
-     * Internal coroutine wrapper around Android AccessibilityService.dispatchGesture().
-     */
     private suspend fun dispatchGestureSuspending(
         service: AccessibilityService,
         gesture: GestureDescription

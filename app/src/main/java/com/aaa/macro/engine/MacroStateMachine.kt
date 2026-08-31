@@ -10,6 +10,7 @@ import com.aaa.macro.model.LootConfig
 import com.aaa.macro.model.LootSnapshot
 import com.aaa.macro.model.MacroState
 import com.aaa.macro.model.MacroStats
+import com.aaa.macro.service.MacroAccessibilityService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,12 +27,18 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.opencv.core.Mat
 import org.opencv.core.Point
+import java.util.Random
 
 /**
- * High-Performance Finite State Machine Game Controller.
+ * Production-Grade Finite State Machine Game Controller.
  *
- * Coordinates VisionEngine, HumanGestureDispatcher, and ResolutionScaler
- * across asynchronous game routines with anti-detection heuristics and failsafe recovery.
+ * Advanced Heuristics & Anti-Detection:
+ * - Hardware Kill-Switch listener (Volume Down)
+ * - Camera Calibration Routine (Pinch-to-zoom-out & corner drag)
+ * - Multi-touch simultaneous troop deployment
+ * - Background Failsafe & Desync Auto-Recovery (checks for Reload/Try Again popups every 3s)
+ * - Session Fatigue Simulation (micro-pauses of 30-60s every 3-5 raids)
+ * - Thermal & Resource Throttling (1.5-2 FPS analysis frequency)
  */
 class MacroStateMachine(
     private val context: Context,
@@ -52,7 +59,7 @@ class MacroStateMachine(
         private val COORD_RETURN_HOME = PointF(960f, 910f)
         private val COORD_SAFE_ZONE = PointF(960f, 400f)
 
-        // Bounding box for Loot Numbers (Gold & Elixir) at 1920x1080 (Top-Left HUD)
+        // Bounding box for Loot Numbers at 1920x1080 (Top-Left HUD)
         private val LOOT_HUD_BOX_1080P = Rect(40, 50, 480, 240)
 
         // Troop slots at 1920x1080 (Bottom bar)
@@ -64,8 +71,10 @@ class MacroStateMachine(
         )
     }
 
+    private val random = Random()
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var machineJob: Job? = null
+    private var backgroundFailsafeJob: Job? = null
 
     private val _state = MutableStateFlow(MacroState.IDLE)
     val state: StateFlow<MacroState> = _state.asStateFlow()
@@ -79,24 +88,40 @@ class MacroStateMachine(
     private val _logStream = MutableSharedFlow<String>(replay = 20)
     val logStream: SharedFlow<String> = _logStream.asSharedFlow()
 
+    private var raidsSinceLastBreak = 0
+    private var nextFatigueThreshold = 3 + random.nextInt(3) // 3 to 5 raids
+
     private var attackBtnTemplate: Mat? = null
     private var findMatchBtnTemplate: Mat? = null
     private var nextBtnTemplate: Mat? = null
     private var returnHomeBtnTemplate: Mat? = null
     private var endBattleBtnTemplate: Mat? = null
     private var cloudsTemplate: Mat? = null
+    private var reloadDialogTemplate: Mat? = null
+    private var tryAgainDialogTemplate: Mat? = null
 
     init {
         loadReferenceTemplates()
+        setupKillSwitch()
+    }
+
+    private fun setupKillSwitch() {
+        MacroAccessibilityService.registerKillSwitchListener {
+            Log.w(TAG, "Kill-switch callback invoked! Halting MacroStateMachine.")
+            pause()
+            _state.value = MacroState.IDLE
+        }
     }
 
     private fun loadReferenceTemplates() {
-        attackBtnTemplate = AssetHelper.loadMatFromAsset(context, "templates/attack_button.png", grayscale = false)
-        findMatchBtnTemplate = AssetHelper.loadMatFromAsset(context, "templates/find_match_button.png", grayscale = false)
-        nextBtnTemplate = AssetHelper.loadMatFromAsset(context, "templates/next_button.png", grayscale = false)
-        returnHomeBtnTemplate = AssetHelper.loadMatFromAsset(context, "templates/return_home_button.png", grayscale = false)
-        endBattleBtnTemplate = AssetHelper.loadMatFromAsset(context, "templates/end_battle_button.png", grayscale = false)
-        cloudsTemplate = AssetHelper.loadMatFromAsset(context, "templates/clouds_indicator.png", grayscale = false)
+        attackBtnTemplate = AssetHelper.loadMatFromAsset(context, "templates/attack_button.png")
+        findMatchBtnTemplate = AssetHelper.loadMatFromAsset(context, "templates/find_match_button.png")
+        nextBtnTemplate = AssetHelper.loadMatFromAsset(context, "templates/next_button.png")
+        returnHomeBtnTemplate = AssetHelper.loadMatFromAsset(context, "templates/return_home_button.png")
+        endBattleBtnTemplate = AssetHelper.loadMatFromAsset(context, "templates/end_battle_button.png")
+        cloudsTemplate = AssetHelper.loadMatFromAsset(context, "templates/clouds_indicator.png")
+        reloadDialogTemplate = AssetHelper.loadMatFromAsset(context, "templates/dialog_reload.png")
+        tryAgainDialogTemplate = AssetHelper.loadMatFromAsset(context, "templates/dialog_try_again.png")
     }
 
     private suspend fun emitLog(message: String) {
@@ -113,8 +138,10 @@ class MacroStateMachine(
             return
         }
 
+        startBackgroundFailsafeWatcher()
+
         machineJob = scope.launch {
-            emitLog("Starting AAA Macro Engine...")
+            emitLog("Starting AAA Macro Engine with Anti-Detection Heuristics...")
             _state.value = MacroState.STATE_HOME
 
             var stateStartTime = System.currentTimeMillis()
@@ -124,11 +151,25 @@ class MacroStateMachine(
                 try {
                     when (_state.value) {
                         MacroState.IDLE -> {
-                            delay(200)
+                            delay(250)
                         }
 
                         MacroState.STATE_HOME -> {
-                            emitLog("Village detected. Initiating attack sequence...")
+                            // Check Session Fatigue Break
+                            if (raidsSinceLastBreak >= nextFatigueThreshold) {
+                                val fatigueSeconds = 30 + random.nextInt(31) // 30 to 60s
+                                emitLog("💤 Simulating human session fatigue... Resting for ${fatigueSeconds}s.")
+                                gestureDispatcher.humanSleep(fatigueSeconds * 1000L, 2000L)
+                                raidsSinceLastBreak = 0
+                                nextFatigueThreshold = 3 + random.nextInt(3)
+                            }
+
+                            // Camera calibration routine before interacting with village
+                            emitLog("Calibrating camera position (Pinch-to-zoom & corner drag)...")
+                            resetCameraPosition()
+                            gestureDispatcher.humanSleep(600L, 100L)
+
+                            emitLog("Village calibrated. Initiating attack sequence...")
                             val executed = executeHomeState()
                             if (executed) {
                                 currentSearchCount = 0
@@ -147,16 +188,17 @@ class MacroStateMachine(
                                 continue
                             }
 
+                            // Thermal throttling: 1.5 - 2 FPS
                             val isBaseReady = checkBaseReady()
                             if (isBaseReady) {
                                 currentSearchCount++
                                 _stats.value = _stats.value.copy(totalSearches = _stats.value.totalSearches + 1)
                                 emitLog("Base loaded! (Search #$currentSearchCount). Evaluating loot...")
-                                gestureDispatcher.humanSleep(600L, 100L)
+                                gestureDispatcher.humanSleep(500L, 100L)
                                 _state.value = MacroState.STATE_EVALUATE
                                 stateStartTime = System.currentTimeMillis()
                             } else {
-                                gestureDispatcher.humanSleep(800L, 150L)
+                                gestureDispatcher.humanSleep(600L, 100L)
                             }
                         }
 
@@ -167,12 +209,13 @@ class MacroStateMachine(
 
                             val meetsTarget = (loot.gold >= lootConfig.minGold && loot.elixir >= lootConfig.minElixir)
                             if (meetsTarget) {
-                                emitLog("🎯 TARGET MET! [Gold: ${loot.gold}, Elixir: ${loot.elixir}] -> Commencing deployment!")
+                                emitLog("🎯 TARGET MET! [Gold: ${loot.gold}, Elixir: ${loot.elixir}] -> Starting multi-touch deployment!")
                                 _stats.value = _stats.value.copy(
                                     attacksExecuted = _stats.value.attacksExecuted + 1,
                                     totalGoldLooted = _stats.value.totalGoldLooted + loot.gold,
                                     totalElixirLooted = _stats.value.totalElixirLooted + loot.elixir
                                 )
+                                raidsSinceLastBreak++
                                 _state.value = MacroState.STATE_DEPLOY
                                 stateStartTime = System.currentTimeMillis()
                             } else {
@@ -185,9 +228,9 @@ class MacroStateMachine(
                         }
 
                         MacroState.STATE_DEPLOY -> {
-                            emitLog("Executing anti-detection deployment routine...")
-                            executeTroopDeployment()
-                            emitLog("Deployment finished. Waiting for battle completion...")
+                            emitLog("Executing multi-touch troop deployment...")
+                            executeMultiTouchTroopDeployment()
+                            emitLog("Deployment finished. Monitoring battle completion...")
                             _state.value = MacroState.STATE_RETURN_HOME
                             stateStartTime = System.currentTimeMillis()
                         }
@@ -224,28 +267,80 @@ class MacroStateMachine(
                 } catch (e: Exception) {
                     emitLog("Error in macro loop: ${e.localizedMessage}")
                     Log.e(TAG, "Exception in StateMachine loop", e)
-                    gestureDispatcher.humanSleep(2000L, 500L)
+                    gestureDispatcher.humanSleep(1500L, 300L)
                 }
             }
         }
     }
 
     /**
-     * Pauses state machine execution.
+     * Background Failsafe Handler:
+     * Periodically (every 3 seconds) inspects screen frames for error / desync popups
+     * and automatically taps Reload or Try Again to recover game connectivity.
      */
-    fun pause() {
-        machineJob?.cancel()
-        machineJob = null
-        _state.value = MacroState.IDLE
-        scope.launch { emitLog("Macro paused by user.") }
+    private fun startBackgroundFailsafeWatcher() {
+        backgroundFailsafeJob?.cancel()
+        backgroundFailsafeJob = scope.launch {
+            while (isActive) {
+                delay(3000L)
+                if (_state.value == MacroState.IDLE) continue
+
+                try {
+                    val screenMat = visionEngine.captureScreenMat()
+                    if (screenMat != null) {
+                        var recovered = false
+
+                        // Check Reload Dialog
+                        if (reloadDialogTemplate != null) {
+                            val pt = visionEngine.findTemplate(screenMat, reloadDialogTemplate!!, 0.75f)
+                            if (pt != null) {
+                                emitLog("⚠️ Disconnect dialog detected! Tapping 'Reload Game' to reconnect...")
+                                gestureDispatcher.humanTap(pt.x.toFloat(), pt.y.toFloat())
+                                recovered = true
+                            }
+                        }
+
+                        // Check Try Again Dialog
+                        if (!recovered && tryAgainDialogTemplate != null) {
+                            val pt = visionEngine.findTemplate(screenMat, tryAgainDialogTemplate!!, 0.75f)
+                            if (pt != null) {
+                                emitLog("⚠️ Connection error detected! Tapping 'Try Again'...")
+                                gestureDispatcher.humanTap(pt.x.toFloat(), pt.y.toFloat())
+                                recovered = true
+                            }
+                        }
+
+                        screenMat.release()
+
+                        if (recovered) {
+                            gestureDispatcher.humanSleep(4000L, 800L)
+                            _state.value = MacroState.STATE_HOME
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in background failsafe watcher", e)
+                }
+            }
+        }
     }
 
     /**
-     * Completely stops state machine and clears metrics.
+     * Camera Calibration Routine:
+     * Performs a two-finger pinch-to-zoom-out gesture followed by a corner drag
+     * to normalize game camera perspective before interactions.
      */
-    fun stop() {
-        pause()
-        _state.value = MacroState.IDLE
+    private suspend fun resetCameraPosition() {
+        val scaler = visionEngine.resolutionScaler
+        val center = scaler.scalePoint(960f, 540f)
+
+        // Two-finger pinch zoom out
+        gestureDispatcher.pinchZoomOut(centerX = center.x, centerY = center.y, span = 350f * scaler.scaleX)
+        gestureDispatcher.humanSleep(450L, 80L)
+
+        // Drag screen towards top-left to align base to standard coordinate grid
+        val startDrag = scaler.scalePoint(1300f, 750f)
+        val endDrag = scaler.scalePoint(600f, 350f)
+        gestureDispatcher.humanSwipe(startDrag.x, startDrag.y, endDrag.x, endDrag.y, durationMs = 380L)
     }
 
     /**
@@ -274,36 +369,27 @@ class MacroStateMachine(
         gestureDispatcher.humanTap(targetX, targetY)
         gestureDispatcher.humanSleep(900L, 150L)
 
-        // Find Match button
         val matchScaled = visionEngine.resolutionScaler.scalePoint(COORD_FIND_MATCH.x, COORD_FIND_MATCH.y)
         gestureDispatcher.humanTap(matchScaled.x, matchScaled.y)
         gestureDispatcher.humanSleep(1200L, 200L)
         return true
     }
 
-    /**
-     * Checks if base is loaded and "Next" button / HUD is visible (not clouds).
-     */
     private fun checkBaseReady(): Boolean {
         val screenMat = visionEngine.captureScreenMat() ?: return false
         try {
-            // Check if Next button template matches or if screen has high feature variance
             if (nextBtnTemplate != null) {
                 val nextPoint = visionEngine.findTemplate(screenMat, nextBtnTemplate!!, 0.70f)
                 if (nextPoint != null) {
                     return true
                 }
             }
-            // Fallback: Check if image has valid non-cloud pixel content
             return true
         } finally {
             screenMat.release()
         }
     }
 
-    /**
-     * Evaluates Gold and Elixir using ML Kit Text Recognition on the top-left HUD area.
-     */
     private suspend fun evaluateLootOnScreen(): LootSnapshot {
         val bitmap = visionEngine.captureScreenBitmap() ?: return LootSnapshot()
         try {
@@ -320,9 +406,6 @@ class MacroStateMachine(
         }
     }
 
-    /**
-     * Taps the "Next" button in the bottom right corner.
-     */
     private suspend fun tapNextButton() {
         val screenMat = visionEngine.captureScreenMat()
         var nextPoint: Point? = null
@@ -346,12 +429,11 @@ class MacroStateMachine(
     }
 
     /**
-     * STATE_DEPLOY: Iterates troop slots and deposits units across natural boundary lines.
+     * STATE_DEPLOY: Multi-touch concurrent troop deployment across outer perimeter lines.
      */
-    private suspend fun executeTroopDeployment() {
+    private suspend fun executeMultiTouchTroopDeployment() {
         val scaler = visionEngine.resolutionScaler
 
-        // Deploy across outer perimeter lines (Top-Left, Top-Right, Bottom-Left, Bottom-Right)
         val deployLines = listOf(
             Pair(PointF(350f, 250f), PointF(960f, 150f)),
             Pair(PointF(960f, 150f), PointF(1570f, 250f)),
@@ -365,63 +447,54 @@ class MacroStateMachine(
 
             // Select troop slot
             gestureDispatcher.humanTap(scaledSlot.x, scaledSlot.y, jitterRadius = 5f)
-            gestureDispatcher.humanSleep(150L, 30L)
+            gestureDispatcher.humanSleep(160L, 30L)
 
-            // Drop troops in batches along perimeter line
             val line = deployLines[slotIndex % deployLines.size]
             val pStart = scaler.scalePoint(line.first.x, line.first.y)
             val pEnd = scaler.scalePoint(line.second.x, line.second.y)
 
-            val drops = 8
+            // Multi-touch drop points along the boundary line
+            val multiTouchPoints = mutableListOf<PointF>()
+            val drops = 4
             for (i in 0..drops) {
                 val alpha = i.toFloat() / drops
                 val dropX = pStart.x + alpha * (pEnd.x - pStart.x)
                 val dropY = pStart.y + alpha * (pEnd.y - pStart.y)
-
-                gestureDispatcher.humanTap(dropX, dropY, jitterRadius = 12f)
-                gestureDispatcher.humanSleep(battleConfig.deployDelayBaseMs, battleConfig.deployDelayVarianceMs)
+                multiTouchPoints.add(PointF(dropX, dropY))
             }
+
+            // Dispatch concurrent multi-touch stroke gestures
+            gestureDispatcher.humanMultiTouchDeploy(multiTouchPoints)
+            gestureDispatcher.humanSleep(battleConfig.deployDelayBaseMs, battleConfig.deployDelayVarianceMs)
         }
 
-        // Allow battle to progress
         emitLog("Troops deployed. Monitoring battle...")
         gestureDispatcher.humanSleep(12000L, 2000L)
     }
 
-    /**
-     * STATE_RETURN_HOME: Finds and taps "End Battle" / "Return Home".
-     */
     private suspend fun executeReturnHome(): Boolean {
         val scaler = visionEngine.resolutionScaler
 
-        // Tap End Battle (Bottom Left)
         val endBattleScaled = scaler.scalePoint(COORD_END_BATTLE.x, COORD_END_BATTLE.y)
         gestureDispatcher.humanTap(endBattleScaled.x, endBattleScaled.y)
         gestureDispatcher.humanSleep(800L, 150L)
 
-        // Tap Confirm "OK"
         val confirmScaled = scaler.scalePoint(COORD_CONFIRM_END.x, COORD_CONFIRM_END.y)
         gestureDispatcher.humanTap(confirmScaled.x, confirmScaled.y)
         gestureDispatcher.humanSleep(1200L, 200L)
 
-        // Tap Return Home (Center Bottom)
         val returnHomeScaled = scaler.scalePoint(COORD_RETURN_HOME.x, COORD_RETURN_HOME.y)
         gestureDispatcher.humanTap(returnHomeScaled.x, returnHomeScaled.y)
         return true
     }
 
-    /**
-     * STATE_RECOVERY: Dismisses potential disconnect/popup dialogs by tapping safe neutral areas.
-     */
     private suspend fun executeFailsafeRecovery() {
         val scaler = visionEngine.resolutionScaler
         val safePoint = scaler.scalePoint(COORD_SAFE_ZONE.x, COORD_SAFE_ZONE.y)
 
-        // Tap neutral points and swipes to wake up interface
         gestureDispatcher.humanTap(safePoint.x, safePoint.y, jitterRadius = 25f)
         gestureDispatcher.humanSleep(500L, 100L)
 
-        // Small swipe to clear stuck modal dialogs
         gestureDispatcher.humanSwipe(
             safePoint.x,
             safePoint.y,
@@ -429,6 +502,20 @@ class MacroStateMachine(
             safePoint.y,
             durationMs = 250L
         )
+    }
+
+    fun pause() {
+        machineJob?.cancel()
+        machineJob = null
+        backgroundFailsafeJob?.cancel()
+        backgroundFailsafeJob = null
+        _state.value = MacroState.IDLE
+        scope.launch { emitLog("Macro paused by user.") }
+    }
+
+    fun stop() {
+        pause()
+        _state.value = MacroState.IDLE
     }
 
     fun release() {
@@ -439,6 +526,8 @@ class MacroStateMachine(
         returnHomeBtnTemplate?.release()
         endBattleBtnTemplate?.release()
         cloudsTemplate?.release()
+        reloadDialogTemplate?.release()
+        tryAgainDialogTemplate?.release()
         AssetHelper.clearCache()
     }
 }

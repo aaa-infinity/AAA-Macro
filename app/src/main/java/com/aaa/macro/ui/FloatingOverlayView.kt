@@ -14,8 +14,9 @@ import android.widget.ArrayAdapter
 import com.aaa.macro.R
 import com.aaa.macro.databinding.LayoutFloatingMenuBinding
 import com.aaa.macro.engine.FarmingFSM
-import com.aaa.macro.engine.FarmingPreset
+import com.aaa.macro.model.FarmingPreset
 import com.aaa.macro.model.MacroState
+import com.aaa.macro.model.MacroStats
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -255,7 +256,7 @@ class FloatingOverlayView(
         }
 
         scope.launch {
-            farmingFSM.stats.collectLatest { stats ->
+            farmingFSM.stats.collectLatest { stats: MacroStats ->
                 binding.tvSearchCount.text = "#${stats.totalSearches}"
             }
         }

@@ -5,6 +5,7 @@ import android.graphics.PointF
 import android.graphics.Rect
 import android.util.Log
 import com.aaa.macro.model.BattleConfig
+import com.aaa.macro.model.FarmingPreset
 import com.aaa.macro.model.LootConfig
 import com.aaa.macro.model.LootSnapshot
 import com.aaa.macro.model.MacroState

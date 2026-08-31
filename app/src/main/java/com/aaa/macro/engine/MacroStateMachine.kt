@@ -39,7 +39,7 @@ import java.util.Random
  */
 class MacroStateMachine(
     private val context: Context,
-    private val visionEngine: VisionEngine,
+    private val visionEngine: OfflineVisionEngine,
     private val gestureDispatcher: HumanGestureDispatcher,
     val lootConfig: LootConfig = LootConfig(),
     val battleConfig: BattleConfig = BattleConfig()

@@ -58,7 +58,7 @@ class FloatingMenuService : Service() {
     private lateinit var windowManager: WindowManager
     private lateinit var mediaProjectionManager: MediaProjectionManager
 
-    private var visionEngine: VisionEngine? = null
+    private var visionEngine: OfflineVisionEngine? = null
     private var gestureDispatcher: HumanGestureDispatcher? = null
     private var stateMachine: MacroStateMachine? = null
     private var overlayView: FloatingOverlayView? = null
@@ -118,7 +118,7 @@ class FloatingMenuService : Service() {
         val screenHeight = if (size.y > 0) size.y else metrics.heightPixels
 
         val resolutionScaler = ResolutionScaler(screenWidth, screenHeight)
-        val vision = VisionEngine(applicationContext, resolutionScaler)
+        val vision = OfflineVisionEngine(applicationContext, resolutionScaler)
         vision.initializeCapture(mediaProjection, screenWidth, screenHeight, metrics.densityDpi)
         this.visionEngine = vision
 

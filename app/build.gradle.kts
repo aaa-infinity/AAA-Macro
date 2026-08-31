@@ -26,7 +26,6 @@ android {
 
     signingConfigs {
         create("release") {
-            // Uses standard debug key for easy release build distribution if custom keystore is not provided
             val debugKeystore = file("${System.getProperty("user.home")}/.android/debug.keystore")
             if (debugKeystore.exists()) {
                 storeFile = debugKeystore
@@ -65,6 +64,10 @@ android {
         viewBinding = true
     }
 
+    aaptOptions {
+        noCompress("tflite")
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -85,9 +88,12 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-service:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
 
+    // On-Device Edge ML: TensorFlow Lite (Zero-Cloud Offline AI)
+    implementation("org.tensorflow:tensorflow-lite:2.14.0")
+
     // Computer Vision - OpenCV Android SDK
     implementation("com.quickbirdstudios:opencv:4.5.3.0")
 
-    // ML Kit Text Recognition (On-device OCR)
+    // Local On-Device OCR - Google ML Kit Text Recognition (100% Offline)
     implementation("com.google.mlkit:text-recognition:16.0.0")
 }

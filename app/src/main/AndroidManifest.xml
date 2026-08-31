@@ -33,7 +33,13 @@
             </intent-filter>
         </activity>
 
-        <!-- MediaProjection Capture Permission Activity -->
+        <!-- MediaProjection Capture Permission Activities -->
+        <activity
+            android:name=".CaptureActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AAAMacro.Translucent"
+            android:excludeFromRecents="true" />
+
         <activity
             android:name=".CapturePermissionActivity"
             android:exported="false"

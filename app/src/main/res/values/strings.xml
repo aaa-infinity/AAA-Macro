@@ -1,0 +1,38 @@
+<resources>
+    <string name="app_name">AAA Macro</string>
+    <string name="accessibility_service_name">AAA Macro Automation Engine</string>
+    <string name="accessibility_service_description">Provides safe, no-root human-like input simulation (taps, Bézier swipes) for game automation routines.</string>
+    
+    <!-- Permissions and Setup -->
+    <string name="perm_overlay_title">Floating Window Permission</string>
+    <string name="perm_overlay_desc">Allows AAA Macro to display the floating control bar over other applications.</string>
+    <string name="perm_accessibility_title">Accessibility Service</string>
+    <string name="perm_accessibility_desc">Required to simulate touches and gestures without root access.</string>
+    <string name="perm_media_projection_title">Screen Capture Engine</string>
+    <string name="perm_media_projection_desc">Required for real-time OpenCV template matching and ML Kit OCR recognition.</string>
+    <string name="perm_battery_title">Battery Optimization</string>
+    <string name="perm_battery_desc">Allows background macro execution without being terminated by OS power management.</string>
+    
+    <!-- Actions -->
+    <string name="btn_grant">Grant</string>
+    <string name="btn_granted">Granted ✓</string>
+    <string name="btn_launch_overlay">Start Floating Menu</string>
+    <string name="btn_start_macro">Start Macro</string>
+    <string name="btn_pause_macro">Pause Macro</string>
+    <string name="btn_stop_macro">Stop</string>
+    
+    <!-- State Labels -->
+    <string name="status_idle">IDLE</string>
+    <string name="status_home">HOME BASE</string>
+    <string name="status_searching">SEARCHING...</string>
+    <string name="status_evaluate">EVALUATING LOOT</string>
+    <string name="status_deploy">DEPLOYING TROOPS</string>
+    <string name="status_return_home">RETURNING HOME</string>
+    <string name="status_recovery">RECOVERING / FAILSAFE</string>
+    
+    <!-- Notification -->
+    <string name="notification_channel_name">AAA Macro Service</string>
+    <string name="notification_channel_desc">Active foreground service for screen capture and state machine execution.</string>
+    <string name="notification_title">AAA Macro Active</string>
+    <string name="notification_text">Engine running in background. Tap floating menu to control.</string>
+</resources>

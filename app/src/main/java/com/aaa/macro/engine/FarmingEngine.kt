@@ -4,12 +4,14 @@ import android.graphics.PointF
 import android.util.Log
 import com.aaa.macro.service.MacroAccessibilityService
 import kotlinx.coroutines.*
+import java.io.File
 
 /**
  * Enterprise Autonomous Clash of Clans Farming Engine.
  *
  * Implements:
  * - Autonomous State Loop: HOME -> MATCHMAKING -> COMBAT -> RETURNING.
+ * - Dynamic Replay of User-Recorded Attacks via TouchReplayEngine.
  * - Zero-Asset relative percentage coordinates (adaptive across all landscape screen sizes).
  * - Direct execution via MacroAccessibilityService.dispatchTap.
  * - Real-time status update callbacks to FloatingHub UI.
@@ -21,6 +23,8 @@ object FarmingEngine {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     var isRunning: Boolean = false
         private set
+
+    var customAttackFile: File? = null
 
     enum class GameState { HOME, MATCHMAKING, COMBAT, RETURNING }
     private var state = GameState.HOME
@@ -75,21 +79,29 @@ object FarmingEngine {
                             state = GameState.COMBAT
                         }
                         GameState.COMBAT -> {
-                            onUpdate("COMBAT: Deploying Army")
-                            // 1. Select First Troop Slot
-                            MacroAccessibilityService.instance?.dispatchTap(w * 0.18f, h * 0.90f)
-                            delay(300)
+                            val recordingFile = customAttackFile
+                            if (recordingFile != null && TouchReplayEngine.hasRecording(recordingFile)) {
+                                onUpdate("COMBAT: Replaying Custom Attack")
+                                TouchReplayEngine.replay(recordingFile, w, h) { cur, total ->
+                                    onUpdate("REPLAY: $cur/$total")
+                                }
+                            } else {
+                                onUpdate("COMBAT: Deploying Army")
+                                // 1. Select First Troop Slot
+                                MacroAccessibilityService.instance?.dispatchTap(w * 0.18f, h * 0.90f)
+                                delay(300)
 
-                            // 2. Multi-point deployment spread
-                            val spread = listOf(
-                                PointF(w * 0.25f, h * 0.20f),
-                                PointF(w * 0.35f, h * 0.15f),
-                                PointF(w * 0.45f, h * 0.12f),
-                                PointF(w * 0.55f, h * 0.15f)
-                            )
-                            spread.forEach { pt ->
-                                MacroAccessibilityService.instance?.dispatchTap(pt.x, pt.y)
-                                delay(120)
+                                // 2. Multi-point deployment spread
+                                val spread = listOf(
+                                    PointF(w * 0.25f, h * 0.20f),
+                                    PointF(w * 0.35f, h * 0.15f),
+                                    PointF(w * 0.45f, h * 0.12f),
+                                    PointF(w * 0.55f, h * 0.15f)
+                                )
+                                spread.forEach { pt ->
+                                    MacroAccessibilityService.instance?.dispatchTap(pt.x, pt.y)
+                                    delay(120)
+                                }
                             }
 
                             // Hold battle duration (Anti-lockout window)

@@ -49,10 +49,13 @@ import com.aaa.macro.engine.HumanGestureDispatcher
 import com.aaa.macro.engine.OfflineVisionEngine
 import com.aaa.macro.engine.ResolutionScaler
 import com.aaa.macro.engine.ScreenCaptureManager
+import com.aaa.macro.engine.TouchRecorder
+import com.aaa.macro.engine.TouchReplayEngine
 import com.aaa.macro.engine.ViewportDetector
 import com.aaa.macro.engine.WakeManager
 import com.aaa.macro.model.FarmingPreset
 import com.aaa.macro.model.MacroState
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -114,9 +117,12 @@ open class FloatingHubService : Service() {
     private var dockPill: FrameLayout? = null
     private var expandedMenu: LinearLayout? = null
     private var btnPlay: ImageButton? = null
+    private var btnRecord: ImageButton? = null
     private var btnClose: ImageButton? = null
     private var tvStatusTitle: TextView? = null
     private var tvStrategySubtitle: TextView? = null
+
+    private val customAttackMacroFile by lazy { File(filesDir, "custom_attack_macro.json") }
 
     private var cutoutManager: CutoutManager? = null
     private var viewportDetector: ViewportDetector? = null
@@ -130,6 +136,8 @@ open class FloatingHubService : Service() {
         super.onCreate()
         isRunning = true
         Log.i(TAG, "FloatingHubService onCreate()")
+
+        FarmingEngine.customAttackFile = customAttackMacroFile
 
         if (!OpenCVLoader.initDebug()) {
             Log.w(TAG, "OpenCV native library init check.")
@@ -270,9 +278,16 @@ open class FloatingHubService : Service() {
             dockPill = view.findViewById(R.id.dock_pill)
             expandedMenu = view.findViewById(R.id.expanded_menu)
             btnPlay = view.findViewById(R.id.btn_action_play)
+            btnRecord = view.findViewById(R.id.btn_action_record)
             btnClose = view.findViewById(R.id.btn_action_close)
             tvStatusTitle = view.findViewById(R.id.tv_status_title)
             tvStrategySubtitle = view.findViewById(R.id.tv_strategy_subtitle)
+
+            if (TouchReplayEngine.hasRecording(customAttackMacroFile)) {
+                btnRecord?.setColorFilter(0xFF10B981.toInt())
+            } else {
+                btnRecord?.setColorFilter(0xFF8B5CF6.toInt())
+            }
 
             tvStrategySubtitle?.text = selectedPreset.shortName
 
@@ -407,6 +422,13 @@ open class FloatingHubService : Service() {
                 cycleStrategyPreset()
             }
 
+            // Record / Save Attack Button Listener with Tactile Haptic Feedback
+            btnRecord?.setOnClickListener {
+                btnRecord?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                resetIdleFade()
+                toggleAttackRecording()
+            }
+
             // Close Button Listener with Tactile Haptic Feedback
             btnClose?.setOnClickListener {
                 btnClose?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
@@ -420,6 +442,36 @@ open class FloatingHubService : Service() {
             Log.i(TAG, "Circular floating dock attached to WindowManager successfully.")
         } catch (e: Exception) {
             Log.e(TAG, "Error showing floating widget", e)
+        }
+    }
+
+    private fun toggleAttackRecording() {
+        if (!TouchRecorder.isRecording) {
+            // Start recording
+            TouchRecorder.startRecording(this) { count ->
+                Handler(Looper.getMainLooper()).post {
+                    tvStatusTitle?.text = "REC: $count"
+                }
+            }
+            btnRecord?.setImageResource(android.R.drawable.ic_menu_save)
+            btnRecord?.setColorFilter(0xFFEF4444.toInt()) // Red recording indicator
+            tvStatusTitle?.text = "RECORDING"
+            Toast.makeText(
+                this,
+                "🔴 Recording attack! Perform your troop drops in Clash of Clans, then tap Save.",
+                Toast.LENGTH_LONG
+            ).show()
+        } else {
+            // Stop and save
+            val count = TouchRecorder.stopAndSave(customAttackMacroFile)
+            btnRecord?.setImageResource(android.R.drawable.ic_btn_speak_now)
+            btnRecord?.setColorFilter(0xFF10B981.toInt()) // Green saved indicator
+            tvStatusTitle?.text = "SAVED ($count)"
+            Toast.makeText(
+                this,
+                "✅ Saved $count attack touches! Bot will now replay this custom attack sequence.",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -581,6 +633,11 @@ open class FloatingHubService : Service() {
             }
             rootView = null
         }
+
+        if (TouchRecorder.isRecording) {
+            TouchRecorder.stopAndSave(customAttackMacroFile)
+        }
+        TouchRecorder.removeOverlayInterceptor()
 
         FarmingEngine.stop { }
         farmingFSM?.release()

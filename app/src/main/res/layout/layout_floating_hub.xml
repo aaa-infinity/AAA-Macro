@@ -77,6 +77,17 @@
                 android:textSize="10sp" />
         </LinearLayout>
 
+        <!-- Record Attack Action Button -->
+        <ImageButton
+            android:id="@+id/btn_action_record"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/bg_action_circle"
+            android:contentDescription="Record Attack"
+            android:src="@android:drawable/ic_btn_speak_now"
+            android:tint="#8B5CF6" />
+
         <!-- Close / Exit Button -->
         <ImageButton
             android:id="@+id/btn_action_close"

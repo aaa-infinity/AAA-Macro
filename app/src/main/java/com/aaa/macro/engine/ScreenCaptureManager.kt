@@ -75,19 +75,22 @@ class ScreenCaptureManager(
 
             release()
 
+            val landscapeWidth = maxOf(width, height)
+            val landscapeHeight = minOf(width, height)
+
             this.mediaProjection = projection
-            this.resolutionScaler.updateDimensions(width, height)
+            this.resolutionScaler.updateDimensions(landscapeWidth, landscapeHeight)
 
             projection.registerCallback(projectionCallback, mainHandler)
 
             // Buffer capacity of 2 for minimal latency and zero memory bloat
-            val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+            val reader = ImageReader.newInstance(landscapeWidth, landscapeHeight, PixelFormat.RGBA_8888, 2)
             this.imageReader = reader
 
             this.virtualDisplay = projection.createVirtualDisplay(
                 VIRTUAL_DISPLAY_NAME,
-                width,
-                height,
+                landscapeWidth,
+                landscapeHeight,
                 densityDpi,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 reader.surface,
@@ -96,7 +99,7 @@ class ScreenCaptureManager(
             )
 
             this.isInitialized = true
-            Log.i(TAG, "ScreenCaptureManager initialized at ${width}x${height} ($densityDpi DPI)")
+            Log.i(TAG, "ScreenCaptureManager initialized at landscape ${landscapeWidth}x${landscapeHeight} ($densityDpi DPI)")
         }
     }
 

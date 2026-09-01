@@ -15,6 +15,8 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
+import com.aaa.macro.service.MacroAccessibilityService
+
 /**
  * Enterprise Anti-Detection Gesture Engine.
  *
@@ -26,7 +28,7 @@ import kotlin.math.sqrt
  * - Cubic Bézier swipe paths.
  */
 class HumanGestureDispatcher(
-    private val serviceProvider: () -> AccessibilityService?
+    private val serviceProvider: () -> AccessibilityService? = { MacroAccessibilityService.instance }
 ) {
     companion object {
         private const val TAG = "HumanGesture"

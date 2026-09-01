@@ -8,13 +8,13 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
-import java.lang.ref.WeakReference
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Android Native Accessibility Service with Package Safety Watcher & Hardware Kill-Switch.
  *
  * Features:
+ * - Singleton instance tracking for HumanGestureDispatcher
  * - Package Safety Watcher: Detects when com.supercell.clashofclans loses foreground focus and pauses macro.
  * - Hardware Kill-Switch: VOLUME_DOWN key event interceptor for instant abort.
  * - High-speed dispatchGesture execution.
@@ -25,10 +25,7 @@ class MacroAccessibilityService : AccessibilityService() {
         private const val TAG = "MacroAccessibility"
         private const val TARGET_GAME_PACKAGE = "com.supercell.clashofclans"
 
-        private var instanceRef: WeakReference<MacroAccessibilityService>? = null
-
-        val instance: MacroAccessibilityService?
-            get() = instanceRef?.get()
+        var instance: MacroAccessibilityService? = null
 
         val isRunning: Boolean
             get() = instance != null
@@ -79,8 +76,8 @@ class MacroAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        instanceRef = WeakReference(this)
-        Log.i(TAG, "MacroAccessibilityService connected successfully with Package Safety Watcher.")
+        instance = this
+        Log.i(TAG, "MacroAccessibilityService connected successfully. Singleton instance assigned.")
     }
 
     override fun onKeyEvent(event: KeyEvent?): Boolean {
@@ -126,13 +123,13 @@ class MacroAccessibilityService : AccessibilityService() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         Log.i(TAG, "MacroAccessibilityService unbinding.")
-        instanceRef = null
+        instance = null
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
         Log.i(TAG, "MacroAccessibilityService destroyed.")
-        instanceRef = null
+        instance = null
         super.onDestroy()
     }
 }

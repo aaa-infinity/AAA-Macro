@@ -50,8 +50,14 @@ class MainActivity : AppCompatActivity() {
             }
             ContextCompat.startForegroundService(this, serviceIntent)
 
-            // Move app to background so the user returns immediately to Clash of Clans
-            moveTaskToBack(true)
+            // Automatically launch Clash of Clans over foreground
+            val launchIntent = packageManager.getLaunchIntentForPackage("com.supercell.clashofclans")
+            if (launchIntent != null) {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(launchIntent)
+            } else {
+                moveTaskToBack(true)
+            }
         } else {
             Toast.makeText(this, "Screen capture permission is required for auto-farming", Toast.LENGTH_LONG).show()
         }

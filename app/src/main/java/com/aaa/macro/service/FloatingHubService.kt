@@ -12,6 +12,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.graphics.Point
+import android.graphics.PointF
 import android.hardware.display.DisplayManager
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
@@ -25,7 +26,7 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import android.widget.Button
+import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
@@ -38,6 +39,7 @@ import com.aaa.macro.engine.FarmingFSM
 import com.aaa.macro.engine.HumanGestureDispatcher
 import com.aaa.macro.engine.OfflineVisionEngine
 import com.aaa.macro.engine.ResolutionScaler
+import com.aaa.macro.engine.ScreenCaptureManager
 import com.aaa.macro.engine.ViewportDetector
 import com.aaa.macro.engine.WakeManager
 import com.aaa.macro.model.FarmingPreset
@@ -49,12 +51,16 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.opencv.android.OpenCVLoader
+import kotlin.math.abs
 
 /**
- * Enterprise Foreground Service hosting the Floating Mini-Hub UI.
+ * Enterprise Foreground Service hosting the Macrorify-Style Floating Circular Dock UI.
  *
- * Guaranteed visibility across all Android devices (including Samsung OneUI) using
- * ContextThemeWrapper with android.R.style.Theme_DeviceDefault_Light and high-contrast styling.
+ * Features:
+ * - Collapsed Mode: 48dp circular green/gold emblem docked to screen edge.
+ * - Expanded Mode: Sleek horizontal pill containing Play/Pause, Army Selector, Status HUD, and Exit.
+ * - Android 14 compliant MediaProjection lifecycle with instant ScreenCaptureManager.init().
+ * - Direct Attack button targeting on Play tap.
  */
 open class FloatingHubService : Service() {
 
@@ -64,8 +70,8 @@ open class FloatingHubService : Service() {
         const val CHANNEL_ID = "aaa_macro_channel"
 
         const val ACTION_START_WITH_PROJECTION = "com.aaa.macro.ACTION_START_WITH_PROJECTION"
-        const val EXTRA_RESULT_CODE = "extra_result_code"
-        const val EXTRA_PROJECTION_DATA = "extra_projection_data"
+        const val EXTRA_RESULT_CODE = "EXTRA_RESULT_CODE"
+        const val EXTRA_PROJECTION_DATA = "EXTRA_RESULT_DATA"
 
         var isRunning: Boolean = false
             private set
@@ -78,12 +84,18 @@ open class FloatingHubService : Service() {
     private lateinit var wakeManager: WakeManager
     private lateinit var settingsRepository: SettingsRepository
 
+    private var mediaProjection: MediaProjection? = null
+
     private var floatingView: View? = null
     private lateinit var params: WindowManager.LayoutParams
 
-    private var btnPlay: Button? = null
+    private var collapsedView: View? = null
+    private var expandedMenu: View? = null
+    private var btnPlayPause: ImageButton? = null
+    private var btnStrategyMenu: View? = null
     private var tvArmyStrategy: TextView? = null
-    private var btnClose: TextView? = null
+    private var tvStatusHud: TextView? = null
+    private var btnCloseDock: ImageButton? = null
 
     private var cutoutManager: CutoutManager? = null
     private var viewportDetector: ViewportDetector? = null
@@ -92,6 +104,7 @@ open class FloatingHubService : Service() {
     private var farmingFSM: FarmingFSM? = null
 
     private var isMacroActive = false
+    private var selectedPreset = FarmingPreset.DRAGON_EDRAG_WAVE
 
     override fun onCreate() {
         super.onCreate()
@@ -107,6 +120,7 @@ open class FloatingHubService : Service() {
         wakeManager = WakeManager(applicationContext)
         wakeManager.acquireWakeLock()
         settingsRepository = SettingsRepository(applicationContext)
+        selectedPreset = settingsRepository.loadSelectedPreset()
 
         startServiceForeground()
         showFloatingWidget()
@@ -136,7 +150,7 @@ open class FloatingHubService : Service() {
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("AAA Macro Active")
-            .setContentText("Floating controller active over Clash of Clans")
+            .setContentText("Circular floating dock active over Clash of Clans")
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
@@ -162,7 +176,6 @@ open class FloatingHubService : Service() {
         if (floatingView != null) return
 
         try {
-            // ContextThemeWrapper ensures drawables, fonts, and button styles inflate reliably on Samsung OneUI & all OEMs
             val themedContext = ContextThemeWrapper(this, android.R.style.Theme_DeviceDefault_Light)
             floatingView = LayoutInflater.from(themedContext).inflate(R.layout.layout_floating_hub, null)
 
@@ -174,8 +187,8 @@ open class FloatingHubService : Service() {
             }
 
             val (savedX, savedY) = settingsRepository.loadOverlayPosition()
-            val initialX = if (savedX > 0) savedX else 100
-            val initialY = if (savedY > 0) savedY else 100
+            val initialX = if (savedX > 0) savedX else 80
+            val initialY = if (savedY > 0) savedY else 180
 
             params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -193,34 +206,41 @@ open class FloatingHubService : Service() {
 
             val view = floatingView ?: return
 
-            btnPlay = view.findViewById(R.id.btn_play_pause)
-            btnClose = view.findViewById(R.id.btn_close_hub)
+            collapsedView = view.findViewById(R.id.dock_collapsed_view)
+            expandedMenu = view.findViewById(R.id.dock_expanded_menu)
+            btnPlayPause = view.findViewById(R.id.btn_play_pause)
+            btnStrategyMenu = view.findViewById(R.id.btn_strategy_menu)
             tvArmyStrategy = view.findViewById(R.id.tv_army_strategy)
-            val root = view.findViewById<View>(R.id.hub_root)
-            val dragHandle = view.findViewById<View>(R.id.tv_drag_handle)
+            tvStatusHud = view.findViewById(R.id.tv_status_hud)
+            btnCloseDock = view.findViewById(R.id.btn_close_dock)
 
-            val savedPreset = settingsRepository.loadSelectedPreset()
-            tvArmyStrategy?.text = savedPreset.displayName
+            tvArmyStrategy?.text = selectedPreset.displayName
 
-            btnPlay?.setOnClickListener {
-                togglePlayPause()
+            // Play / Pause Button Listener
+            btnPlayPause?.setOnClickListener {
+                onPlayPauseClicked()
             }
 
-            tvArmyStrategy?.setOnClickListener {
+            // Strategy Selector Button Listener
+            val strategyClickListener = View.OnClickListener {
                 cycleStrategyPreset()
             }
+            btnStrategyMenu?.setOnClickListener(strategyClickListener)
+            tvArmyStrategy?.setOnClickListener(strategyClickListener)
 
-            btnClose?.setOnClickListener {
+            // Close Dock Button Listener
+            btnCloseDock?.setOnClickListener {
                 farmingFSM?.stop()
                 stopSelf()
             }
 
-            // Draggable Touch Listener on root and drag handle
-            val dragTouchListener = object : View.OnTouchListener {
+            // Draggable touch listener with tap-to-expand detection on collapsedView
+            collapsedView?.setOnTouchListener(object : View.OnTouchListener {
                 private var initialParamX = 0
                 private var initialParamY = 0
                 private var initialTouchX = 0f
                 private var initialTouchY = 0f
+                private var isDragging = false
 
                 override fun onTouch(v: View, event: MotionEvent): Boolean {
                     when (event.action) {
@@ -229,69 +249,115 @@ open class FloatingHubService : Service() {
                             initialParamY = params.y
                             initialTouchX = event.rawX
                             initialTouchY = event.rawY
+                            isDragging = false
                             return true
                         }
                         MotionEvent.ACTION_MOVE -> {
-                            params.x = initialParamX + (event.rawX - initialTouchX).toInt()
-                            params.y = initialParamY + (event.rawY - initialTouchY).toInt()
-                            try {
-                                windowManager.updateViewLayout(view, params)
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Error updating floating view layout", e)
+                            val dx = event.rawX - initialTouchX
+                            val dy = event.rawY - initialTouchY
+                            if (abs(dx) > 8 || abs(dy) > 8) {
+                                isDragging = true
+                                params.x = initialParamX + dx.toInt()
+                                params.y = initialParamY + dy.toInt()
+                                try {
+                                    windowManager.updateViewLayout(view, params)
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Error updating floating view layout", e)
+                                }
+                                return true
                             }
-                            return true
                         }
                         MotionEvent.ACTION_UP -> {
-                            settingsRepository.saveOverlayPosition(params.x, params.y)
+                            if (isDragging) {
+                                settingsRepository.saveOverlayPosition(params.x, params.y)
+                            } else {
+                                // Tap toggles expanded dock
+                                toggleDockExpansion()
+                            }
                             return true
                         }
                     }
                     return false
                 }
-            }
-
-            dragHandle?.setOnTouchListener(dragTouchListener)
-            root.setOnTouchListener(dragTouchListener)
+            })
 
             windowManager.addView(view, params)
-            Log.i(TAG, "Floating hub view attached to WindowManager successfully.")
+            Log.i(TAG, "Circular floating dock attached to WindowManager successfully.")
         } catch (e: Exception) {
             Log.e(TAG, "Error showing floating widget", e)
         }
     }
 
-    private fun togglePlayPause() {
-        val fsm = farmingFSM
-        if (fsm == null) {
-            Toast.makeText(this, "Screen capture not yet initialized. Please launch from dashboard.", Toast.LENGTH_SHORT).show()
+    private fun toggleDockExpansion() {
+        val menu = expandedMenu ?: return
+        if (menu.visibility == View.VISIBLE) {
+            menu.visibility = View.GONE
+        } else {
+            menu.visibility = View.VISIBLE
+        }
+    }
+
+    private fun onPlayPauseClicked() {
+        if (!ScreenCaptureManager.isReady() || mediaProjection == null) {
+            Toast.makeText(
+                this,
+                "Screen capture not yet initialized. Please launch from AAA Macro dashboard.",
+                Toast.LENGTH_LONG
+            ).show()
             return
         }
 
+        val fsm = farmingFSM ?: return
+
         isMacroActive = !isMacroActive
         if (isMacroActive) {
-            fsm.start()
-            btnPlay?.text = "PAUSE"
-            btnPlay?.setBackgroundColor(0xFFEF4444.toInt())
-            Toast.makeText(this, "Macro Started", Toast.LENGTH_SHORT).show()
+            // Update UI to Active/Pause state
+            btnPlayPause?.setImageResource(android.R.drawable.ic_media_pause)
+            btnPlayPause?.setBackgroundResource(R.drawable.bg_circle_close)
+            tvStatusHud?.text = "STARTING"
+            Toast.makeText(this, "Macro Started [${selectedPreset.displayName}]", Toast.LENGTH_SHORT).show()
+
+            // 1. Launch FarmingFSM with active strategy
+            fsm.start(strategy = selectedPreset)
+
+            // 2. Direct Action Execution: Capture active screen, find "Attack" button and dispatch tap
+            serviceScope.launch(Dispatchers.Default) {
+                val screenMat = visionEngine?.captureScreenMat()
+                if (screenMat != null) {
+                    try {
+                        val attackPt = visionEngine?.findAttackButton(screenMat)
+                        if (attackPt != null) {
+                            val mappedPoint = viewportDetector?.mapToScreen(PointF(attackPt.x.toFloat(), attackPt.y.toFloat()))
+                                ?: PointF(attackPt.x.toFloat(), attackPt.y.toFloat())
+                            val finalPoint = cutoutManager?.adjustCoordinate(mappedPoint) ?: mappedPoint
+                            gestureDispatcher?.humanTap(finalPoint.x, finalPoint.y)
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Direct attack tap exception", e)
+                    } finally {
+                        screenMat.release()
+                    }
+                }
+            }
         } else {
+            // Update UI to Paused state
             fsm.pause()
-            btnPlay?.text = "START"
-            btnPlay?.setBackgroundColor(0xFFF59E0B.toInt())
+            btnPlayPause?.setImageResource(android.R.drawable.ic_media_play)
+            btnPlayPause?.setBackgroundResource(R.drawable.bg_circle_play)
+            tvStatusHud?.text = "PAUSED"
             Toast.makeText(this, "Macro Paused", Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun cycleStrategyPreset() {
-        val fsm = farmingFSM
         val presets = FarmingPreset.values()
-        val currentPreset = fsm?.selectedPreset?.value ?: settingsRepository.loadSelectedPreset()
-        val nextIndex = (presets.indexOf(currentPreset) + 1) % presets.size
-        val nextPreset = presets[nextIndex]
+        val nextIndex = (presets.indexOf(selectedPreset) + 1) % presets.size
+        selectedPreset = presets[nextIndex]
 
-        fsm?.setPreset(nextPreset)
-        settingsRepository.saveSelectedPreset(nextPreset)
-        tvArmyStrategy?.text = nextPreset.displayName
-        Toast.makeText(this, "Strategy: ${nextPreset.displayName}", Toast.LENGTH_SHORT).show()
+        farmingFSM?.setPreset(selectedPreset)
+        settingsRepository.saveSelectedPreset(selectedPreset)
+        tvArmyStrategy?.text = selectedPreset.displayName
+        Toast.makeText(this, "Strategy: ${selectedPreset.displayName}", Toast.LENGTH_SHORT).show()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -300,33 +366,39 @@ open class FloatingHubService : Service() {
 
         if (intent != null) {
             val resultCode = intent.getIntExtra(
-                "RESULT_CODE",
-                intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
+                "EXTRA_RESULT_CODE",
+                intent.getIntExtra("RESULT_CODE", intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED))
             )
 
-            val projectionData: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableExtra("RESULT_DATA", Intent::class.java)
+            val resultData: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra("EXTRA_RESULT_DATA", Intent::class.java)
+                    ?: intent.getParcelableExtra("RESULT_DATA", Intent::class.java)
                     ?: intent.getParcelableExtra(EXTRA_PROJECTION_DATA, Intent::class.java)
             } else {
                 @Suppress("DEPRECATION")
-                intent.getParcelableExtra("RESULT_DATA")
+                intent.getParcelableExtra("EXTRA_RESULT_DATA")
+                    ?: intent.getParcelableExtra("RESULT_DATA")
                     ?: intent.getParcelableExtra(EXTRA_PROJECTION_DATA)
             }
 
-            if (resultCode == Activity.RESULT_OK && projectionData != null) {
-                setupEngines(resultCode, projectionData)
-            } else if (resultCode != Activity.RESULT_CANCELED && projectionData != null) {
-                setupEngines(resultCode, projectionData)
+            if (resultCode == Activity.RESULT_OK && resultData != null) {
+                Log.i(TAG, "Acquiring MediaProjection from token extras...")
+                val projection = mediaProjectionManager.getMediaProjection(resultCode, resultData)
+                this.mediaProjection = projection
+
+                // Initialize ScreenCaptureManager virtual display immediately
+                ScreenCaptureManager.init(this, projection)
+
+                // Initialize vision engine, gesture engine, and FSM
+                setupEngines(projection)
             }
         }
 
         return START_NOT_STICKY
     }
 
-    private fun setupEngines(resultCode: Int, projectionData: Intent) {
+    private fun setupEngines(projection: MediaProjection) {
         try {
-            val mediaProjection: MediaProjection = mediaProjectionManager.getMediaProjection(resultCode, projectionData)
-
             val metrics = resources.displayMetrics
             val display = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 display ?: (getSystemService(Context.DISPLAY_SERVICE) as DisplayManager).getDisplay(Display.DEFAULT_DISPLAY)
@@ -355,7 +427,7 @@ open class FloatingHubService : Service() {
             // Scaler & Vision Engine
             val resolutionScaler = ResolutionScaler(landscapeWidth, landscapeHeight)
             val vision = OfflineVisionEngine(applicationContext, resolutionScaler)
-            vision.initializeCapture(mediaProjection, landscapeWidth, landscapeHeight, metrics.densityDpi)
+            vision.initializeCapture(projection, landscapeWidth, landscapeHeight, metrics.densityDpi)
             this.visionEngine = vision
 
             // Humanized Gesture Dispatcher using singleton Accessibility instance
@@ -372,21 +444,30 @@ open class FloatingHubService : Service() {
             )
             this.farmingFSM = fsm
 
-            val savedPreset = settingsRepository.loadSelectedPreset()
-            fsm.setPreset(savedPreset)
-            tvArmyStrategy?.text = savedPreset.displayName
+            fsm.setPreset(selectedPreset)
+            tvArmyStrategy?.text = selectedPreset.displayName
 
-            // Observe FSM state and dynamically update floating widget button
+            // Observe FSM state and dynamically update floating widget HUD
             serviceScope.launch {
                 fsm.state.collectLatest { state ->
+                    tvStatusHud?.text = when (state) {
+                        MacroState.IDLE -> "IDLE"
+                        MacroState.STATE_HOME -> "HOME"
+                        MacroState.STATE_SEARCHING -> "SEARCH"
+                        MacroState.STATE_EVALUATE -> "EVAL"
+                        MacroState.STATE_DEPLOY -> "DEPLOY"
+                        MacroState.STATE_RETURN_HOME -> "RETURN"
+                        MacroState.STATE_RECOVERY -> "RECOVER"
+                    }
+
                     if (state == MacroState.IDLE) {
                         isMacroActive = false
-                        btnPlay?.text = "START"
-                        btnPlay?.setBackgroundColor(0xFFF59E0B.toInt())
+                        btnPlayPause?.setImageResource(android.R.drawable.ic_media_play)
+                        btnPlayPause?.setBackgroundResource(R.drawable.bg_circle_play)
                     } else {
                         isMacroActive = true
-                        btnPlay?.text = "PAUSE"
-                        btnPlay?.setBackgroundColor(0xFFEF4444.toInt())
+                        btnPlayPause?.setImageResource(android.R.drawable.ic_media_pause)
+                        btnPlayPause?.setBackgroundResource(R.drawable.bg_circle_close)
                     }
                 }
             }
@@ -421,5 +502,8 @@ open class FloatingHubService : Service() {
 
         visionEngine?.release()
         visionEngine = null
+
+        mediaProjection?.stop()
+        mediaProjection = null
     }
 }

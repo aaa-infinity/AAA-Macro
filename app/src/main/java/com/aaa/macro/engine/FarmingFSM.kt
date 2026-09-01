@@ -162,7 +162,10 @@ class FarmingFSM(
         _logStream.emit(message)
     }
 
-    fun start() {
+    fun start(strategy: FarmingPreset? = null) {
+        if (strategy != null) {
+            setPreset(strategy)
+        }
         if (fsmJob?.isActive == true) return
 
         startBackgroundFailsafeWatcher()

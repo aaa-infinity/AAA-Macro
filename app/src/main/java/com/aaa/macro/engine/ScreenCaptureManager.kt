@@ -35,6 +35,31 @@ class ScreenCaptureManager(
     companion object {
         private const val TAG = "ScreenCaptureManager"
         private const val VIRTUAL_DISPLAY_NAME = "AAA_Macro_Capture"
+
+        @Volatile
+        var instance: ScreenCaptureManager? = null
+            private set
+
+        fun init(context: Context, projection: MediaProjection): ScreenCaptureManager {
+            val metrics = context.resources.displayMetrics
+            val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
+            val size = android.graphics.Point()
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay.getRealSize(size)
+            val w = if (size.x > 0) size.x else metrics.widthPixels
+            val h = if (size.y > 0) size.y else metrics.heightPixels
+            val landscapeW = maxOf(w, h)
+            val landscapeH = minOf(w, h)
+
+            val scaler = ResolutionScaler(landscapeW, landscapeH)
+            val manager = instance ?: ScreenCaptureManager(context.applicationContext, scaler).also {
+                instance = it
+            }
+            manager.initialize(projection, landscapeW, landscapeH, metrics.densityDpi)
+            return manager
+        }
+
+        fun isReady(): Boolean = instance?.isReady() == true
     }
 
     private var mediaProjection: MediaProjection? = null
@@ -47,6 +72,8 @@ class ScreenCaptureManager(
     @Volatile
     var isInitialized: Boolean = false
         private set
+
+    fun isReady(): Boolean = isInitialized && virtualDisplay != null && imageReader != null
 
     private val projectionCallback = object : MediaProjection.Callback() {
         override fun onStop() {
@@ -68,6 +95,7 @@ class ScreenCaptureManager(
         densityDpi: Int
     ) {
         captureLock.withLock {
+            instance = this
             if (isInitialized && virtualDisplay != null && mediaProjection == projection) {
                 Log.i(TAG, "VirtualDisplay already active for this session. Preserving active instance.")
                 return

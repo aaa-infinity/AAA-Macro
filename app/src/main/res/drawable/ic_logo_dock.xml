@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Star / Shield Emblem -->
+    <path
+        android:fillColor="#FEF3C7"
+        android:pathData="M12,2L15.09,8.26L22,9.27L17,14.14L18.18,21.02L12,17.77L5.82,21.02L7,14.14L2,9.27L8.91,8.26L12,2Z" />
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M12,6.5L13.8,10.2L18,10.8L15,13.7L15.7,17.8L12,15.8L8.3,17.8L9,13.7L6,10.8L10.2,10.2L12,6.5Z" />
+</vector>

@@ -3,59 +3,111 @@
     android:id="@+id/hub_root"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
-    android:background="@drawable/bg_floating_pill"
-    android:elevation="16dp"
-    android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:padding="8dp">
+    android:gravity="center_vertical"
+    android:clickable="true"
+    android:focusable="true">
 
-    <!-- Drag Handle / Logo -->
-    <TextView
-        android:id="@+id/tv_drag_handle"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
-        android:layout_marginEnd="8dp"
-        android:background="#10B981"
-        android:gravity="center"
-        android:text="AAA"
-        android:textColor="#FFFFFF"
-        android:textSize="12sp"
-        android:textStyle="bold" />
+    <!-- Collapsed Mode: 48dp Circular Green/Gold Emblem Docked to Screen Edge -->
+    <FrameLayout
+        android:id="@+id/dock_collapsed_view"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="@drawable/bg_dock_circle"
+        android:elevation="12dp"
+        android:clickable="true"
+        android:focusable="true">
 
-    <!-- Play / Pause Button -->
-    <Button
-        android:id="@+id/btn_play_pause"
+        <ImageView
+            android:id="@+id/iv_dock_logo"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="center"
+            android:contentDescription="AAA Macro Emblem"
+            android:src="@drawable/ic_logo_dock" />
+    </FrameLayout>
+
+    <!-- Expanded Mode: Horizontal Dock Menu with Circular Action Buttons -->
+    <LinearLayout
+        android:id="@+id/dock_expanded_menu"
         android:layout_width="wrap_content"
-        android:layout_height="38dp"
-        android:layout_marginEnd="6dp"
-        android:backgroundTint="#F59E0B"
-        android:text="START"
-        android:textColor="#FFFFFF"
-        android:textSize="12sp"
-        android:textStyle="bold" />
+        android:layout_height="48dp"
+        android:layout_marginStart="4dp"
+        android:background="@drawable/bg_floating_pill"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:elevation="12dp"
+        android:paddingStart="6dp"
+        android:paddingEnd="10dp"
+        android:visibility="gone">
 
-    <!-- Army Selector Label -->
-    <TextView
-        android:id="@+id/tv_army_strategy"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:paddingStart="4dp"
-        android:paddingEnd="8dp"
-        android:text="Dragon Wave"
-        android:textColor="#1E293B"
-        android:textSize="11sp"
-        android:textStyle="bold" />
+        <!-- 🟢 Play / Pause Button (Circle with Play/Pause icon) -->
+        <ImageButton
+            android:id="@+id/btn_play_pause"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:background="@drawable/bg_circle_play"
+            android:contentDescription="Play or Pause Macro"
+            android:padding="8dp"
+            android:src="@android:drawable/ic_media_play"
+            android:tint="#FFFFFF" />
 
-    <!-- Close Button -->
-    <TextView
-        android:id="@+id/btn_close_hub"
-        android:layout_width="28dp"
-        android:layout_height="28dp"
-        android:background="?android:attr/selectableItemBackgroundBorderless"
-        android:gravity="center"
-        android:text="✕"
-        android:textColor="#EF4444"
-        android:textSize="16sp"
-        android:textStyle="bold" />
+        <!-- ⚙️ Strategy / Army Button (Pops up army selection) -->
+        <LinearLayout
+            android:id="@+id/btn_strategy_menu"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/bg_circle_strategy"
+            android:gravity="center"
+            android:clickable="true"
+            android:focusable="true"
+            android:orientation="horizontal"
+            android:paddingHorizontal="10dp">
+
+            <TextView
+                android:id="@+id/tv_army_strategy"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Dragon Wave"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- 📊 Status HUD (Mini text showing current state: SEARCHING, DEPLOYING) -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_marginEnd="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tv_status_hud"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_status_badge_light"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="4dp"
+                android:text="IDLE"
+                android:textColor="#1E293B"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- ❌ Close Button (Circle with X icon) -->
+        <ImageButton
+            android:id="@+id/btn_close_dock"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_circle_close"
+            android:contentDescription="Close Floating Dock"
+            android:padding="6dp"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:tint="#FFFFFF" />
+
+    </LinearLayout>
 
 </LinearLayout>

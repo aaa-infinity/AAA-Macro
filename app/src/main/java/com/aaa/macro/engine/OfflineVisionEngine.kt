@@ -267,6 +267,20 @@ class OfflineVisionEngine(
     }
 
     /**
+     * Finds the Attack button on the home village screen.
+     */
+    fun findAttackButton(screenMat: Mat): Point? {
+        val w = screenMat.cols()
+        val h = screenMat.rows()
+        if (w <= 0 || h <= 0) return null
+
+        // In Clash of Clans, the primary Attack button is anchored in the bottom-left corner
+        val attackX = w * 0.055
+        val attackY = h * 0.895
+        return Point(attackX, attackY)
+    }
+
+    /**
      * Template matching with TM_CCOEFF_NORMED.
      */
     fun findTemplate(screenMat: Mat, templateMat: Mat, threshold: Float = 0.85f): Point? {

@@ -43,12 +43,18 @@ class MainActivity : AppCompatActivity() {
             Log.i(TAG, "Screen capture permission granted. Starting FloatingHubService...")
             val serviceIntent = Intent(this, FloatingHubService::class.java).apply {
                 action = FloatingHubService.ACTION_START_WITH_PROJECTION
+                putExtra("EXTRA_RESULT_CODE", result.resultCode)
+                putExtra("EXTRA_RESULT_DATA", result.data)
                 putExtra("RESULT_CODE", result.resultCode)
                 putExtra("RESULT_DATA", result.data)
                 putExtra(FloatingHubService.EXTRA_RESULT_CODE, result.resultCode)
                 putExtra(FloatingHubService.EXTRA_PROJECTION_DATA, result.data)
             }
-            ContextCompat.startForegroundService(this, serviceIntent)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
 
             // Automatically launch Clash of Clans over foreground
             val launchIntent = packageManager.getLaunchIntentForPackage("com.supercell.clashofclans")

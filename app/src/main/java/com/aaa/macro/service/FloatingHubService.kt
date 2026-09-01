@@ -113,20 +113,28 @@ open class FloatingHubService : Service() {
             Log.e(TAG, "Error initiating startForeground", e)
         }
 
-        if (intent?.action == ACTION_START_WITH_PROJECTION) {
-            val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
+        if (intent != null) {
+            val resultCode = intent.getIntExtra(
+                "RESULT_CODE",
+                intent.getIntExtra(EXTRA_RESULT_CODE, android.app.Activity.RESULT_CANCELED)
+            )
+
             val projectionData: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableExtra(EXTRA_PROJECTION_DATA, Intent::class.java)
+                intent.getParcelableExtra("RESULT_DATA", Intent::class.java)
+                    ?: intent.getParcelableExtra(EXTRA_PROJECTION_DATA, Intent::class.java)
             } else {
                 @Suppress("DEPRECATION")
-                intent.getParcelableExtra(EXTRA_PROJECTION_DATA)
+                intent.getParcelableExtra("RESULT_DATA")
+                    ?: intent.getParcelableExtra(EXTRA_PROJECTION_DATA)
             }
 
-            if (resultCode != 0 && projectionData != null) {
+            if (resultCode == android.app.Activity.RESULT_OK && projectionData != null) {
                 // 3. ONLY initialize MediaProjection & createVirtualDisplay AFTER startForeground is active
                 setupEnginesAndOverlay(resultCode, projectionData)
+            } else if (resultCode != android.app.Activity.RESULT_CANCELED && projectionData != null) {
+                setupEnginesAndOverlay(resultCode, projectionData)
             } else {
-                Log.e(TAG, "Invalid projection credentials in onStartCommand.")
+                Log.d(TAG, "No valid projection credentials in onStartCommand.")
             }
         }
 

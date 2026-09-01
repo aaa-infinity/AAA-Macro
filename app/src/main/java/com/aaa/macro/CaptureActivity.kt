@@ -43,10 +43,12 @@ class CaptureActivity : AppCompatActivity() {
             if (result.resultCode == Activity.RESULT_OK && result.data != null) {
                 Log.i(TAG, "MediaProjection granted.")
 
-                val serviceIntent = Intent(this, FloatingMenuService::class.java).apply {
-                    action = FloatingMenuService.ACTION_START_WITH_PROJECTION
-                    putExtra(FloatingMenuService.EXTRA_RESULT_CODE, result.resultCode)
-                    putExtra(FloatingMenuService.EXTRA_PROJECTION_DATA, result.data)
+                val serviceIntent = Intent(this, FloatingHubService::class.java).apply {
+                    action = FloatingHubService.ACTION_START_WITH_PROJECTION
+                    putExtra("RESULT_CODE", result.resultCode)
+                    putExtra("RESULT_DATA", result.data)
+                    putExtra(FloatingHubService.EXTRA_RESULT_CODE, result.resultCode)
+                    putExtra(FloatingHubService.EXTRA_PROJECTION_DATA, result.data)
                 }
 
                 ContextCompat.startForegroundService(this, serviceIntent)

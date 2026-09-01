@@ -45,6 +45,8 @@ class CapturePermissionActivity : AppCompatActivity() {
 
                 val serviceIntent = Intent(this, FloatingHubService::class.java).apply {
                     action = FloatingHubService.ACTION_START_WITH_PROJECTION
+                    putExtra("RESULT_CODE", result.resultCode)
+                    putExtra("RESULT_DATA", result.data)
                     putExtra(FloatingHubService.EXTRA_RESULT_CODE, result.resultCode)
                     putExtra(FloatingHubService.EXTRA_PROJECTION_DATA, result.data)
                 }

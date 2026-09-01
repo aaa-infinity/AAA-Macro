@@ -104,6 +104,7 @@ class ScreenCaptureManager(
             try {
                 image = reader.acquireLatestImage() ?: return null
 
+                val planes = image.planes
                 val plane = planes[0]
                 val buffer: ByteBuffer = plane.buffer
                 buffer.rewind()

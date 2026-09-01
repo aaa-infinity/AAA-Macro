@@ -1,5 +1,8 @@
 package com.aaa.macro.service
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.NotificationChannel
@@ -16,11 +19,14 @@ import android.hardware.display.DisplayManager
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
 import android.view.ContextThemeWrapper
 import android.view.Display
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -89,6 +95,19 @@ open class FloatingHubService : Service() {
     private var mediaProjection: MediaProjection? = null
     private var isMacroRunning = false
     private var isExpanded = false
+
+    private val fadeHandler = Handler(Looper.getMainLooper())
+    private val fadeRunnable = Runnable {
+        if (!isExpanded) {
+            rootView?.animate()?.alpha(0.4f)?.setDuration(300)?.start()
+        }
+    }
+
+    private fun resetIdleFade() {
+        rootView?.animate()?.alpha(1.0f)?.setDuration(150)?.start()
+        fadeHandler.removeCallbacks(fadeRunnable)
+        fadeHandler.postDelayed(fadeRunnable, 3000)
+    }
 
     private var dockPill: FrameLayout? = null
     private var expandedMenu: LinearLayout? = null
@@ -255,7 +274,7 @@ open class FloatingHubService : Service() {
 
             tvStrategySubtitle?.text = selectedPreset.displayName
 
-            // Drag & Click Logic for the Circular Dock
+            // Drag & Click Logic for the Circular Dock with Auto-Edge Magnetic Snapping
             dockPill?.setOnTouchListener(object : View.OnTouchListener {
                 private var initX = 0
                 private var initY = 0
@@ -264,6 +283,7 @@ open class FloatingHubService : Service() {
                 private var isClick = false
 
                 override fun onTouch(v: View?, event: MotionEvent): Boolean {
+                    resetIdleFade()
                     when (event.action) {
                         MotionEvent.ACTION_DOWN -> {
                             initX = params.x
@@ -271,6 +291,8 @@ open class FloatingHubService : Service() {
                             touchX = event.rawX
                             touchY = event.rawY
                             isClick = true
+                            rootView?.animate()?.alpha(1.0f)?.setDuration(150)?.start()
+                            fadeHandler.removeCallbacks(fadeRunnable)
                             return true
                         }
                         MotionEvent.ACTION_MOVE -> {
@@ -290,11 +312,42 @@ open class FloatingHubService : Service() {
                         }
                         MotionEvent.ACTION_UP -> {
                             if (isClick) {
+                                // Tactile Haptic Feedback
+                                dockPill?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                 // Toggle Expanded Menu on Click
                                 isExpanded = !isExpanded
                                 expandedMenu?.visibility = if (isExpanded) View.VISIBLE else View.GONE
+                                if (isExpanded) {
+                                    rootView?.animate()?.alpha(1.0f)?.setDuration(150)?.start()
+                                    fadeHandler.removeCallbacks(fadeRunnable)
+                                } else {
+                                    resetIdleFade()
+                                }
                             } else {
-                                settingsRepository.saveOverlayPosition(params.x, params.y)
+                                // 1. Auto-Edge Magnetic Snapping (Nearest Left/Right Border)
+                                val screenWidth = resources.displayMetrics.widthPixels
+                                val middle = screenWidth / 2
+                                val pillWidth = dockPill?.width ?: 50
+                                val targetX = if (params.x + pillWidth / 2 < middle) 16 else screenWidth - pillWidth - 16
+
+                                val animator = ValueAnimator.ofInt(params.x, targetX).apply {
+                                    duration = 180
+                                    addUpdateListener { animation ->
+                                        params.x = animation.animatedValue as Int
+                                        try {
+                                            windowManager.updateViewLayout(view, params)
+                                        } catch (e: Exception) {
+                                            Log.w(TAG, "Error updating snapped view layout", e)
+                                        }
+                                    }
+                                    addListener(object : AnimatorListenerAdapter() {
+                                        override fun onAnimationEnd(animation: Animator) {
+                                            settingsRepository.saveOverlayPosition(params.x, params.y)
+                                        }
+                                    })
+                                }
+                                animator.start()
+                                resetIdleFade()
                             }
                             return true
                         }
@@ -303,23 +356,29 @@ open class FloatingHubService : Service() {
                 }
             })
 
-            // Play / Pause Button Listener
+            // Play / Pause Button Listener with Tactile Haptic Feedback
             btnPlay?.setOnClickListener {
+                btnPlay?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                resetIdleFade()
                 onPlayPauseClicked()
             }
 
-            // Strategy subtitle tap cycles preset
+            // Strategy subtitle tap cycles preset with Haptic Feedback
             tvStrategySubtitle?.setOnClickListener {
+                tvStrategySubtitle?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                resetIdleFade()
                 cycleStrategyPreset()
             }
 
-            // Close Button Listener
+            // Close Button Listener with Tactile Haptic Feedback
             btnClose?.setOnClickListener {
+                btnClose?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                 farmingFSM?.stop()
                 stopSelf()
             }
 
             windowManager.addView(view, params)
+            resetIdleFade()
             Log.i(TAG, "Circular floating dock attached to WindowManager successfully.")
         } catch (e: Exception) {
             Log.e(TAG, "Error showing floating widget", e)
@@ -473,6 +532,7 @@ open class FloatingHubService : Service() {
         Log.i(TAG, "FloatingHubService onDestroy()")
         isRunning = false
 
+        fadeHandler.removeCallbacks(fadeRunnable)
         wakeManager.releaseWakeLock()
         serviceScope.cancel()
 

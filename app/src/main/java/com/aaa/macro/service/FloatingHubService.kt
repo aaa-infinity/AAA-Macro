@@ -398,26 +398,7 @@ open class FloatingHubService : Service() {
             btnPlay?.setOnClickListener {
                 btnPlay?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                 resetIdleFade()
-
-                if (!FarmingEngine.isRunning) {
-                    btnPlay?.setImageResource(android.R.drawable.ic_media_pause)
-                    btnPlay?.setColorFilter(0xFFF59E0B.toInt())
-
-                    FarmingEngine.start { statusText ->
-                        Handler(Looper.getMainLooper()).post {
-                            tvStatusTitle?.text = statusText
-                        }
-                    }
-                } else {
-                    btnPlay?.setImageResource(android.R.drawable.ic_media_play)
-                    btnPlay?.setColorFilter(0xFF10B981.toInt())
-
-                    FarmingEngine.stop { statusText ->
-                        Handler(Looper.getMainLooper()).post {
-                            tvStatusTitle?.text = statusText
-                        }
-                    }
-                }
+                onPlayPauseClicked()
             }
 
             // Strategy subtitle tap cycles preset with Haptic Feedback
@@ -442,52 +423,26 @@ open class FloatingHubService : Service() {
     }
 
     private fun onPlayPauseClicked() {
-        if (!ScreenCaptureManager.isReady() || mediaProjection == null) {
-            Toast.makeText(
-                this,
-                "Screen capture not yet initialized. Please launch from AAA Macro dashboard.",
-                Toast.LENGTH_SHORT
-            ).show()
-            return
-        }
-
-        val fsm = farmingFSM ?: return
-
-        isMacroRunning = !isMacroRunning
-        if (isMacroRunning) {
+        if (!FarmingEngine.isRunning) {
             btnPlay?.setImageResource(android.R.drawable.ic_media_pause)
             btnPlay?.setColorFilter(0xFFF59E0B.toInt())
-            tvStatusTitle?.text = "RUNNING"
-            Toast.makeText(this, "Macro Started [${selectedPreset.shortName}]", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Farming Engine Started", Toast.LENGTH_SHORT).show()
 
-            // 1. Launch FarmingFSM
-            fsm.start(strategy = selectedPreset)
-
-            // 2. Direct Action Execution: Capture active screen, find "Attack" button and dispatch tap
-            serviceScope.launch(Dispatchers.Default) {
-                val screenMat = visionEngine?.captureScreenMat()
-                if (screenMat != null) {
-                    try {
-                        val attackPt = visionEngine?.findAttackButton(screenMat)
-                        if (attackPt != null) {
-                            val mappedPoint = viewportDetector?.mapToScreen(PointF(attackPt.x.toFloat(), attackPt.y.toFloat()))
-                                ?: PointF(attackPt.x.toFloat(), attackPt.y.toFloat())
-                            val finalPoint = cutoutManager?.adjustCoordinate(mappedPoint) ?: mappedPoint
-                            gestureDispatcher?.humanTap(finalPoint.x, finalPoint.y)
-                        }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Direct attack tap exception", e)
-                    } finally {
-                        screenMat.release()
-                    }
+            FarmingEngine.start { statusText ->
+                Handler(Looper.getMainLooper()).post {
+                    tvStatusTitle?.text = statusText
                 }
             }
         } else {
-            fsm.pause()
             btnPlay?.setImageResource(android.R.drawable.ic_media_play)
             btnPlay?.setColorFilter(0xFF10B981.toInt())
-            tvStatusTitle?.text = "PAUSED"
-            Toast.makeText(this, "Macro Paused", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Farming Engine Paused", Toast.LENGTH_SHORT).show()
+
+            FarmingEngine.stop { statusText ->
+                Handler(Looper.getMainLooper()).post {
+                    tvStatusTitle?.text = statusText
+                }
+            }
         }
     }
 

@@ -1,7 +1,9 @@
 package com.aaa.macro.service
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
 import android.content.Context
+import android.graphics.Path
 import android.content.Intent
 import android.os.Build
 import android.os.Handler
@@ -75,9 +77,24 @@ class MacroAccessibilityService : AccessibilityService() {
                 }
             }
         }
+
+        fun dispatchTap(x: Float, y: Float) {
+            instance?.dispatchTap(x, y)
+        }
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    /**
+     * Dispatches a single tap gesture at (x, y).
+     */
+    fun dispatchTap(x: Float, y: Float) {
+        val path = Path().apply { moveTo(x, y) }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0, 50))
+            .build()
+        dispatchGesture(gesture, null, null)
+    }
 
     override fun onServiceConnected() {
         super.onServiceConnected()

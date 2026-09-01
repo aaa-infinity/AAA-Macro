@@ -12,6 +12,8 @@ import android.media.projection.MediaProjection
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import org.opencv.core.CvType
+import org.opencv.core.Mat
 import java.nio.ByteBuffer
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -19,10 +21,10 @@ import kotlin.concurrent.withLock
 /**
  * Enterprise Single-Buffer Screen Capture Manager with MediaProjection.Callback.
  *
- * Implements low-latency MediaProjection frame extraction with:
- * - Single-buffer recycling to maintain <60 MB total RAM footprint
- * - MediaProjection.Callback.onStop() automatic lifecycle teardown
- * - Direct Region-of-Interest (ROI) cropping without creating full-frame duplicate Bitmaps
+ * Implements:
+ * - Direct Zero-Copy OpenCV Mat extraction from direct ByteBuffer
+ * - Protected frame acquisition with try/finally null-guard
+ * - Single VirtualDisplay per session (persists across Play/Pause)
  * - RowStride padding normalization
  */
 class ScreenCaptureManager(
@@ -56,7 +58,8 @@ class ScreenCaptureManager(
     }
 
     /**
-     * Initializes the VirtualDisplay and single-buffer ImageReader.
+     * Initializes VirtualDisplay once per session.
+     * Never calls createVirtualDisplay twice on the same active token.
      */
     fun initialize(
         projection: MediaProjection,
@@ -65,12 +68,16 @@ class ScreenCaptureManager(
         densityDpi: Int
     ) {
         captureLock.withLock {
+            if (isInitialized && virtualDisplay != null && mediaProjection == projection) {
+                Log.i(TAG, "VirtualDisplay already active for this session. Preserving active instance.")
+                return
+            }
+
             release()
 
             this.mediaProjection = projection
             this.resolutionScaler.updateDimensions(width, height)
 
-            // Register system stop callback
             projection.registerCallback(projectionCallback, mainHandler)
 
             // Buffer capacity of 2 for minimal latency and zero memory bloat
@@ -95,7 +102,7 @@ class ScreenCaptureManager(
 
     /**
      * Captures the latest screen frame as a Bitmap.
-     * Handles rowStride padding cleanly. Callers must invoke .recycle() when done.
+     * Protected from display driver warmup null pointers with try/finally { image.close() }.
      */
     fun acquireLatestBitmap(): Bitmap? {
         captureLock.withLock {
@@ -136,8 +143,92 @@ class ScreenCaptureManager(
     }
 
     /**
-     * Extracts only a localized Region-of-Interest (ROI) directly from the captured frame
-     * avoiding large full-frame Bitmap retention in memory.
+     * Zero-Copy OpenCV Mat extraction directly from ImageReader direct byte buffer.
+     * Eliminates intermediate Bitmap allocations completely.
+     */
+    fun acquireLatestMat(): Mat? {
+        captureLock.withLock {
+            val reader = imageReader ?: return null
+            var image: Image? = null
+            try {
+                image = reader.acquireLatestImage() ?: return null
+
+                val planes = image.planes
+                val plane = planes[0]
+                val buffer: ByteBuffer = plane.buffer
+                buffer.rewind()
+
+                val pixelStride = plane.pixelStride
+                val rowStride = plane.rowStride
+                val rowPadding = rowStride - pixelStride * image.width
+
+                val fullMat = Mat(image.height, rowStride / pixelStride, CvType.CV_8UC4, buffer)
+
+                return if (rowPadding <= 0) {
+                    val cleanMat = Mat()
+                    fullMat.copyTo(cleanMat)
+                    fullMat.release()
+                    cleanMat
+                } else {
+                    val roi = org.opencv.core.Rect(0, 0, image.width, image.height)
+                    val subMat = Mat(fullMat, roi)
+                    val cleanMat = Mat()
+                    subMat.copyTo(cleanMat)
+                    subMat.release()
+                    fullMat.release()
+                    cleanMat
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error acquiring zero-copy Mat: ${e.message}", e)
+                return null
+            } finally {
+                image?.close()
+            }
+        }
+    }
+
+    /**
+     * Direct zero-copy extraction of a localized sub-region Mat.
+     */
+    fun acquireSubRegionMat(roiRect: org.opencv.core.Rect): Mat? {
+        captureLock.withLock {
+            val reader = imageReader ?: return null
+            var image: Image? = null
+            try {
+                image = reader.acquireLatestImage() ?: return null
+
+                val plane = image.planes[0]
+                val buffer: ByteBuffer = plane.buffer
+                buffer.rewind()
+
+                val pixelStride = plane.pixelStride
+                val rowStride = plane.rowStride
+
+                val fullMat = Mat(image.height, rowStride / pixelStride, CvType.CV_8UC4, buffer)
+
+                val safeX = roiRect.x.coerceIn(0, image.width - 1)
+                val safeY = roiRect.y.coerceIn(0, image.height - 1)
+                val safeW = roiRect.width.coerceIn(1, image.width - safeX)
+                val safeH = roiRect.height.coerceIn(1, image.height - safeY)
+
+                val subMat = Mat(fullMat, org.opencv.core.Rect(safeX, safeY, safeW, safeH))
+                val cleanMat = Mat()
+                subMat.copyTo(cleanMat)
+
+                subMat.release()
+                fullMat.release()
+                return cleanMat
+            } catch (e: Exception) {
+                Log.e(TAG, "Error acquiring sub-region Mat: ${e.message}", e)
+                return null
+            } finally {
+                image?.close()
+            }
+        }
+    }
+
+    /**
+     * Extracts only a localized Region-of-Interest (ROI) directly from the captured frame.
      */
     fun acquireRoiBitmap(cropRect: Rect): Bitmap? {
         val fullBitmap = acquireLatestBitmap() ?: return null
@@ -157,7 +248,7 @@ class ScreenCaptureManager(
     }
 
     /**
-     * Releases active MediaProjection, VirtualDisplay, and ImageReader resources.
+     * Releases active MediaProjection, VirtualDisplay, and ImageReader resources on service destroy.
      */
     fun release() {
         captureLock.withLock {

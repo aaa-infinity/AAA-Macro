@@ -459,6 +459,17 @@
             android:textColor="@color/text_primary"
             android:textSize="11sp" />
 
+        <!-- Visual Alignment ROI Toggle -->
+        <CheckBox
+            android:id="@+id/cb_show_rois"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:checked="false"
+            android:text="Show Bot Scanning ROIs"
+            android:textColor="@color/text_secondary"
+            android:textSize="11sp" />
+
         <!-- Main Action Controller Buttons -->
         <LinearLayout
             android:layout_width="match_parent"

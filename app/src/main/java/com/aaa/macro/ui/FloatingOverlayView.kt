@@ -57,6 +57,7 @@ class FloatingOverlayView(
     private var isDragging = false
     private var isExpanded = true
     private var isBatteryDimmingActive = false
+    private val roiVisualizer = RoiVisualizerOverlay(context, windowManager)
 
     init {
         restorePersistedSettings()
@@ -213,6 +214,11 @@ class FloatingOverlayView(
             repository.saveLootConfig(farmingFSM.lootConfig)
         }
 
+        // ROI Visualizer Toggle
+        binding.cbShowRois.setOnCheckedChangeListener { _, isChecked ->
+            roiVisualizer.setVisible(isChecked)
+        }
+
         updateLootThresholdText()
     }
 
@@ -340,6 +346,7 @@ class FloatingOverlayView(
 
     fun detach() {
         try {
+            roiVisualizer.detach()
             if (binding.root.windowToken != null) {
                 windowManager.removeView(binding.root)
                 Log.i(TAG, "FloatingOverlayView detached from WindowManager.")

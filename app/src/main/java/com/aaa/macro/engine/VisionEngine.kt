@@ -66,27 +66,44 @@ class VisionEngine(
     }
 
     /**
-     * Captures the latest screen frame directly as an OpenCV BGR Mat.
+     * Captures current screen frame as OpenCV BGR Mat with zero-copy ByteBuffer.
      */
     fun captureScreenMat(grayscale: Boolean = false): Mat? {
-        val bitmap = captureManager.acquireLatestBitmap() ?: return null
-        val rgbaMat = Mat()
+        val rawMat = captureManager.acquireLatestMat() ?: return null
         val finalMat = Mat()
         try {
-            Utils.bitmapToMat(bitmap, rgbaMat)
             if (grayscale) {
-                Imgproc.cvtColor(rgbaMat, finalMat, Imgproc.COLOR_RGBA2GRAY)
+                Imgproc.cvtColor(rawMat, finalMat, Imgproc.COLOR_RGBA2GRAY)
             } else {
-                Imgproc.cvtColor(rgbaMat, finalMat, Imgproc.COLOR_RGBA2BGR)
+                Imgproc.cvtColor(rawMat, finalMat, Imgproc.COLOR_RGBA2BGR)
             }
             return finalMat.clone()
         } catch (e: Exception) {
-            Log.e(TAG, "Error converting captured bitmap to Mat", e)
+            Log.e(TAG, "Error converting zero-copy raw Mat", e)
             return null
         } finally {
-            bitmap.recycle()
-            rgbaMat.release()
+            rawMat.release()
             finalMat.release()
+        }
+    }
+
+    /**
+     * Sub-Region Bounding Box Scanning.
+     */
+    fun findTemplateInSubRegion(
+        templateMat: Mat,
+        roi: Rect,
+        threshold: Float = 0.85f
+    ): Point? {
+        val subMat = captureManager.acquireSubRegionMat(org.opencv.core.Rect(roi.left, roi.top, roi.width(), roi.height())) ?: return null
+        val bgrSub = Mat()
+        try {
+            Imgproc.cvtColor(subMat, bgrSub, Imgproc.COLOR_RGBA2BGR)
+            val localPoint = findTemplate(bgrSub, templateMat, threshold) ?: return null
+            return Point(localPoint.x + roi.left, localPoint.y + roi.top)
+        } finally {
+            subMat.release()
+            bgrSub.release()
         }
     }
 

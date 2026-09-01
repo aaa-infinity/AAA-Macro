@@ -42,7 +42,8 @@ class OfflineVisionEngine(
     }
 
     val bitmapPool = BitmapPool(poolSize = 3)
-    val captureManager = ScreenCaptureManager(context, resolutionScaler)
+    val captureManager: ScreenCaptureManager
+        get() = ScreenCaptureManager.instance ?: ScreenCaptureManager(context, resolutionScaler)
     val lootOcrEngine = LootOcrEngine(bitmapPool)
 
     private var tfliteInterpreter: Interpreter? = null
@@ -84,7 +85,10 @@ class OfflineVisionEngine(
         height: Int,
         densityDpi: Int
     ) {
-        captureManager.initialize(projection, width, height, densityDpi)
+        val manager = ScreenCaptureManager.instance ?: captureManager
+        if (!manager.isInitialized) {
+            manager.initialize(projection, width, height, densityDpi)
+        }
     }
 
     /**
@@ -316,7 +320,6 @@ class OfflineVisionEngine(
     }
 
     fun release() {
-        captureManager.release()
         bitmapPool.clear()
         lootOcrEngine.release()
         try {

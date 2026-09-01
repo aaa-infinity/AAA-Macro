@@ -2,8 +2,10 @@ package com.aaa.macro
 
 import android.accessibilityservice.AccessibilityService
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -14,13 +16,17 @@ import android.util.Log
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.aaa.macro.databinding.ActivityMainBinding
+import com.aaa.macro.service.FloatingHubService
 import com.aaa.macro.service.MacroAccessibilityService
 import org.opencv.android.OpenCVLoader
 
 /**
- * Modern Light Setup Dashboard with One-Tap Permission Diagnostics.
+ * Modern Light Setup Dashboard with One-Tap Permission Diagnostics and Direct MediaProjection Launcher.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -29,6 +35,27 @@ class MainActivity : AppCompatActivity() {
     }
 
     private lateinit var binding: ActivityMainBinding
+
+    private val projectionLauncher: ActivityResultLauncher<Intent> = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            Log.i(TAG, "Screen capture permission granted. Starting FloatingHubService...")
+            val serviceIntent = Intent(this, FloatingHubService::class.java).apply {
+                action = FloatingHubService.ACTION_START_WITH_PROJECTION
+                putExtra("RESULT_CODE", result.resultCode)
+                putExtra("RESULT_DATA", result.data)
+                putExtra(FloatingHubService.EXTRA_RESULT_CODE, result.resultCode)
+                putExtra(FloatingHubService.EXTRA_PROJECTION_DATA, result.data)
+            }
+            ContextCompat.startForegroundService(this, serviceIntent)
+
+            // Move app to background so the user returns immediately to Clash of Clans
+            moveTaskToBack(true)
+        } else {
+            Toast.makeText(this, "Screen capture permission is required for auto-farming", Toast.LENGTH_LONG).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -177,7 +204,11 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        CapturePermissionActivity.launch(this)
-        Toast.makeText(this, "Launching AAA Farming Mini-Hub...", Toast.LENGTH_SHORT).show()
+        onLaunchFloatingHubClicked()
+    }
+
+    private fun onLaunchFloatingHubClicked() {
+        val mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        projectionLauncher.launch(mediaProjectionManager.createScreenCaptureIntent())
     }
 }

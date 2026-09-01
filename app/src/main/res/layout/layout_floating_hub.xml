@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/hub_root"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:clickable="true"
+    android:focusable="true">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:background="@drawable/bg_floating_hub"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:elevation="8dp"
+        android:paddingStart="8dp"
+        android:paddingEnd="10dp">
+
+        <!-- Play / Pause Toggle Button -->
+        <ImageButton
+            android:id="@+id/btn_play_pause"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Play or Pause Macro"
+            android:src="@android:drawable/ic_media_play"
+            android:tint="#10B981" />
+
+        <!-- Status & Strategy Container -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_marginEnd="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <!-- Strategy Pill -->
+            <TextView
+                android:id="@+id/tv_strategy"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_strategy_pill"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4dp"
+                android:text="Dragon Wave"
+                android:textColor="#D97706"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <!-- State Label -->
+            <TextView
+                android:id="@+id/tv_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="IDLE"
+                android:textColor="#64748B"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Exit / Close Button -->
+        <ImageButton
+            android:id="@+id/btn_close"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="4dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Close Macro"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:tint="#EF4444" />
+
+    </LinearLayout>
+
+</FrameLayout>

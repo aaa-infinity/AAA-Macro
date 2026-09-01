@@ -18,14 +18,16 @@ import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import android.view.ContextThemeWrapper
 import android.view.Display
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import android.widget.ImageButton
+import android.widget.Button
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.aaa.macro.MainActivity
@@ -47,23 +49,19 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.opencv.android.OpenCVLoader
-import kotlin.math.abs
 
 /**
- * Enterprise Foreground Service hosting the Floating Mini-Hub Pill UI.
+ * Enterprise Foreground Service hosting the Floating Mini-Hub UI.
  *
- * Strict Android 14 Compliance:
- * 1. NotificationChannel created FIRST in onCreate().
- * 2. startForeground(MEDIA_PROJECTION) called immediately.
- * 3. Floating Mini-Hub pill widget attached directly to WindowManager in onCreate().
- * 4. Vision Engine & FSM initialized upon receiving MediaProjection consent in onStartCommand().
+ * Guaranteed visibility across all Android devices (including Samsung OneUI) using
+ * ContextThemeWrapper with android.R.style.Theme_DeviceDefault_Light and high-contrast styling.
  */
 open class FloatingHubService : Service() {
 
     companion object {
         private const val TAG = "FloatingHubService"
         const val NOTIFICATION_ID = 1001
-        const val CHANNEL_ID = "aaa_farming_service_channel"
+        const val CHANNEL_ID = "aaa_macro_channel"
 
         const val ACTION_START_WITH_PROJECTION = "com.aaa.macro.ACTION_START_WITH_PROJECTION"
         const val EXTRA_RESULT_CODE = "extra_result_code"
@@ -83,10 +81,9 @@ open class FloatingHubService : Service() {
     private var floatingView: View? = null
     private lateinit var params: WindowManager.LayoutParams
 
-    private var btnPlayPause: ImageButton? = null
-    private var tvStrategy: TextView? = null
-    private var tvStatus: TextView? = null
-    private var btnClose: ImageButton? = null
+    private var btnPlay: Button? = null
+    private var tvArmyStrategy: TextView? = null
+    private var btnClose: TextView? = null
 
     private var cutoutManager: CutoutManager? = null
     private var viewportDetector: ViewportDetector? = null
@@ -94,13 +91,15 @@ open class FloatingHubService : Service() {
     private var gestureDispatcher: HumanGestureDispatcher? = null
     private var farmingFSM: FarmingFSM? = null
 
+    private var isMacroActive = false
+
     override fun onCreate() {
         super.onCreate()
         isRunning = true
         Log.i(TAG, "FloatingHubService onCreate()")
 
         if (!OpenCVLoader.initDebug()) {
-            Log.w(TAG, "OpenCV native library init check.")
+            Log.w(TAG, "OpenCV native library loading check.")
         }
 
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -109,11 +108,41 @@ open class FloatingHubService : Service() {
         wakeManager.acquireWakeLock()
         settingsRepository = SettingsRepository(applicationContext)
 
-        // 1. Create NotificationChannel FIRST
-        createNotificationChannel()
+        startServiceForeground()
+        showFloatingWidget()
+    }
 
-        // 2. Start Foreground immediately (Android 14 requirement)
-        val notification = createNotification()
+    private fun startServiceForeground() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "AAA Macro Service",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Runs background vision capture and floating farming overlay"
+                setShowBadge(false)
+            }
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        }
+
+        val notificationIntent = Intent(this, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            notificationIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("AAA Macro Active")
+            .setContentText("Floating controller active over Clash of Clans")
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+
         val foregroundType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
         } else {
@@ -122,19 +151,20 @@ open class FloatingHubService : Service() {
 
         try {
             ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, foregroundType)
-            Log.i(TAG, "startForeground successfully activated with type: $foregroundType")
+            Log.i(TAG, "startForeground activated successfully.")
         } catch (e: Exception) {
-            Log.e(TAG, "Error initiating startForeground in onCreate", e)
+            Log.e(TAG, "Error initiating startForeground", e)
         }
-
-        // 3. Immediately display the Floating Mini-Hub Pill Widget
-        initFloatingWidget()
     }
 
     @SuppressLint("ClickableViewAccessibility")
-    private fun initFloatingWidget() {
+    private fun showFloatingWidget() {
+        if (floatingView != null) return
+
         try {
-            floatingView = LayoutInflater.from(this).inflate(R.layout.layout_floating_hub, null)
+            // ContextThemeWrapper ensures drawables, fonts, and button styles inflate reliably on Samsung OneUI & all OEMs
+            val themedContext = ContextThemeWrapper(this, android.R.style.Theme_DeviceDefault_Light)
+            floatingView = LayoutInflater.from(themedContext).inflate(R.layout.layout_floating_hub, null)
 
             val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -144,8 +174,8 @@ open class FloatingHubService : Service() {
             }
 
             val (savedX, savedY) = settingsRepository.loadOverlayPosition()
-            val initialXPos = if (savedX > 0) savedX else 120
-            val initialYPos = if (savedY > 0) savedY else 120
+            val initialX = if (savedX > 0) savedX else 100
+            val initialY = if (savedY > 0) savedY else 100
 
             params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -157,100 +187,97 @@ open class FloatingHubService : Service() {
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.TOP or Gravity.START
-                x = initialXPos
-                y = initialYPos
+                x = initialX
+                y = initialY
             }
 
             val view = floatingView ?: return
 
-            // Views
-            btnPlayPause = view.findViewById(R.id.btn_play_pause)
-            tvStrategy = view.findViewById(R.id.tv_strategy)
-            tvStatus = view.findViewById(R.id.tv_status)
-            btnClose = view.findViewById(R.id.btn_close)
+            btnPlay = view.findViewById(R.id.btn_play_pause)
+            btnClose = view.findViewById(R.id.btn_close_hub)
+            tvArmyStrategy = view.findViewById(R.id.tv_army_strategy)
+            val root = view.findViewById<View>(R.id.hub_root)
+            val dragHandle = view.findViewById<View>(R.id.tv_drag_handle)
 
             val savedPreset = settingsRepository.loadSelectedPreset()
-            tvStrategy?.text = savedPreset.displayName
+            tvArmyStrategy?.text = savedPreset.displayName
 
-            // Play / Pause Toggle
-            btnPlayPause?.setOnClickListener {
-                toggleMacroState()
+            btnPlay?.setOnClickListener {
+                togglePlayPause()
             }
 
-            // Strategy Pill Toggle (Cycle presets on tap)
-            tvStrategy?.setOnClickListener {
+            tvArmyStrategy?.setOnClickListener {
                 cycleStrategyPreset()
             }
 
-            // Close Button
             btnClose?.setOnClickListener {
                 farmingFSM?.stop()
                 stopSelf()
             }
 
-            // Draggable touch listener
-            val rootLayout = view.findViewById<View>(R.id.hub_root)
-            rootLayout.setOnTouchListener(object : View.OnTouchListener {
-                private var initialX = 0
-                private var initialY = 0
+            // Draggable Touch Listener on root and drag handle
+            val dragTouchListener = object : View.OnTouchListener {
+                private var initialParamX = 0
+                private var initialParamY = 0
                 private var initialTouchX = 0f
                 private var initialTouchY = 0f
-                private var isDragging = false
 
-                override fun onTouch(v: View?, event: MotionEvent): Boolean {
+                override fun onTouch(v: View, event: MotionEvent): Boolean {
                     when (event.action) {
                         MotionEvent.ACTION_DOWN -> {
-                            initialX = params.x
-                            initialY = params.y
+                            initialParamX = params.x
+                            initialParamY = params.y
                             initialTouchX = event.rawX
                             initialTouchY = event.rawY
-                            isDragging = false
-                            return false
+                            return true
                         }
                         MotionEvent.ACTION_MOVE -> {
-                            val dx = event.rawX - initialTouchX
-                            val dy = event.rawY - initialTouchY
-                            if (abs(dx) > 10 || abs(dy) > 10) {
-                                isDragging = true
-                                params.x = initialX + dx.toInt()
-                                params.y = initialY + dy.toInt()
-                                try {
-                                    windowManager.updateViewLayout(view, params)
-                                } catch (e: Exception) {
-                                    Log.w(TAG, "Error updating floating view layout", e)
-                                }
-                                return true
+                            params.x = initialParamX + (event.rawX - initialTouchX).toInt()
+                            params.y = initialParamY + (event.rawY - initialTouchY).toInt()
+                            try {
+                                windowManager.updateViewLayout(view, params)
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Error updating floating view layout", e)
                             }
+                            return true
                         }
                         MotionEvent.ACTION_UP -> {
-                            if (isDragging) {
-                                settingsRepository.saveOverlayPosition(params.x, params.y)
-                                return true
-                            }
+                            settingsRepository.saveOverlayPosition(params.x, params.y)
+                            return true
                         }
                     }
                     return false
                 }
-            })
+            }
+
+            dragHandle?.setOnTouchListener(dragTouchListener)
+            root.setOnTouchListener(dragTouchListener)
 
             windowManager.addView(view, params)
-            Log.i(TAG, "Floating Mini-Hub pill attached to WindowManager successfully.")
+            Log.i(TAG, "Floating hub view attached to WindowManager successfully.")
         } catch (e: Exception) {
-            Log.e(TAG, "Error initializing floating widget", e)
+            Log.e(TAG, "Error showing floating widget", e)
         }
     }
 
-    private fun toggleMacroState() {
+    private fun togglePlayPause() {
         val fsm = farmingFSM
         if (fsm == null) {
-            tvStatus?.text = "STANDBY"
+            Toast.makeText(this, "Screen capture not yet initialized. Please launch from dashboard.", Toast.LENGTH_SHORT).show()
             return
         }
 
-        if (fsm.state.value == MacroState.IDLE) {
+        isMacroActive = !isMacroActive
+        if (isMacroActive) {
             fsm.start()
+            btnPlay?.text = "PAUSE"
+            btnPlay?.setBackgroundColor(0xFFEF4444.toInt())
+            Toast.makeText(this, "Macro Started", Toast.LENGTH_SHORT).show()
         } else {
             fsm.pause()
+            btnPlay?.text = "START"
+            btnPlay?.setBackgroundColor(0xFFF59E0B.toInt())
+            Toast.makeText(this, "Macro Paused", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -263,24 +290,13 @@ open class FloatingHubService : Service() {
 
         fsm?.setPreset(nextPreset)
         settingsRepository.saveSelectedPreset(nextPreset)
-        tvStrategy?.text = nextPreset.displayName
+        tvArmyStrategy?.text = nextPreset.displayName
+        Toast.makeText(this, "Strategy: ${nextPreset.displayName}", Toast.LENGTH_SHORT).show()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.i(TAG, "FloatingHubService onStartCommand()")
-
-        // Ensure foreground is active
-        val notification = createNotification()
-        val foregroundType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-        } else {
-            0
-        }
-        try {
-            ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, foregroundType)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in onStartCommand startForeground", e)
-        }
+        startServiceForeground()
 
         if (intent != null) {
             val resultCode = intent.getIntExtra(
@@ -325,22 +341,25 @@ open class FloatingHubService : Service() {
             val screenWidth = if (size.x > 0) size.x else metrics.widthPixels
             val screenHeight = if (size.y > 0) size.y else metrics.heightPixels
 
+            val landscapeWidth = maxOf(screenWidth, screenHeight)
+            val landscapeHeight = minOf(screenWidth, screenHeight)
+
             // Cutout & Viewport Detector
             val cutout = CutoutManager(applicationContext)
             cutout.updateCutoutInsets(windowManager)
             this.cutoutManager = cutout
 
-            val viewport = ViewportDetector(screenWidth, screenHeight)
+            val viewport = ViewportDetector(landscapeWidth, landscapeHeight)
             this.viewportDetector = viewport
 
             // Scaler & Vision Engine
-            val resolutionScaler = ResolutionScaler(screenWidth, screenHeight)
+            val resolutionScaler = ResolutionScaler(landscapeWidth, landscapeHeight)
             val vision = OfflineVisionEngine(applicationContext, resolutionScaler)
-            vision.initializeCapture(mediaProjection, screenWidth, screenHeight, metrics.densityDpi)
+            vision.initializeCapture(mediaProjection, landscapeWidth, landscapeHeight, metrics.densityDpi)
             this.visionEngine = vision
 
-            // Humanized Gesture Dispatcher
-            val gestures = HumanGestureDispatcher { MacroAccessibilityService.instance }
+            // Humanized Gesture Dispatcher using singleton Accessibility instance
+            val gestures = HumanGestureDispatcher()
             this.gestureDispatcher = gestures
 
             // Farming Finite State Machine
@@ -355,27 +374,19 @@ open class FloatingHubService : Service() {
 
             val savedPreset = settingsRepository.loadSelectedPreset()
             fsm.setPreset(savedPreset)
-            tvStrategy?.text = savedPreset.displayName
+            tvArmyStrategy?.text = savedPreset.displayName
 
-            // Observe FSM state and dynamically update floating widget
+            // Observe FSM state and dynamically update floating widget button
             serviceScope.launch {
                 fsm.state.collectLatest { state ->
-                    tvStatus?.text = when (state) {
-                        MacroState.IDLE -> "IDLE"
-                        MacroState.STATE_HOME -> "HOME"
-                        MacroState.STATE_SEARCHING -> "SEARCH"
-                        MacroState.STATE_EVALUATE -> "EVAL"
-                        MacroState.STATE_DEPLOY -> "ATTACK"
-                        MacroState.STATE_RETURN_HOME -> "RETURN"
-                        MacroState.STATE_RECOVERY -> "RECOVER"
-                    }
-
                     if (state == MacroState.IDLE) {
-                        btnPlayPause?.setImageResource(android.R.drawable.ic_media_play)
-                        btnPlayPause?.setColorFilter(getColor(R.color.accent_green))
+                        isMacroActive = false
+                        btnPlay?.text = "START"
+                        btnPlay?.setBackgroundColor(0xFFF59E0B.toInt())
                     } else {
-                        btnPlayPause?.setImageResource(android.R.drawable.ic_media_pause)
-                        btnPlayPause?.setColorFilter(getColor(R.color.accent_red))
+                        isMacroActive = true
+                        btnPlay?.text = "PAUSE"
+                        btnPlay?.setBackgroundColor(0xFFEF4444.toInt())
                     }
                 }
             }
@@ -384,40 +395,6 @@ open class FloatingHubService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to setup engines", e)
         }
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "AAA Macro Farming Service",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Runs background vision capture and floating farming overlay"
-                setShowBadge(false)
-            }
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
-        }
-    }
-
-    private fun createNotification(): Notification {
-        val notificationIntent = Intent(this, MainActivity::class.java)
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            notificationIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("AAA Macro Active")
-            .setContentText("Floating farming widget active over Clash of Clans.")
-            .setSmallIcon(R.drawable.ic_launcher)
-            .setContentIntent(pendingIntent)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -430,14 +407,14 @@ open class FloatingHubService : Service() {
         wakeManager.releaseWakeLock()
         serviceScope.cancel()
 
-        floatingView?.let {
+        if (floatingView != null) {
             try {
-                windowManager.removeView(it)
+                windowManager.removeView(floatingView)
             } catch (e: Exception) {
                 Log.w(TAG, "Error removing floating view on destroy", e)
             }
+            floatingView = null
         }
-        floatingView = null
 
         farmingFSM?.release()
         farmingFSM = null

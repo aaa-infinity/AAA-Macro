@@ -493,7 +493,7 @@ class FarmingFSM(
         val notification = NotificationCompat.Builder(context, ALERT_CHANNEL_ID)
             .setContentTitle("⚠️ Storages Full (100% Capacity)")
             .setContentText("Macro paused to prevent wasting Gold & Elixir.")
-            .setSmallIcon(R.drawable.ic_launcher)
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .build()

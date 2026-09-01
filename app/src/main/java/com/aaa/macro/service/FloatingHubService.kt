@@ -272,7 +272,7 @@ open class FloatingHubService : Service() {
             tvStatusTitle = view.findViewById(R.id.tv_status_title)
             tvStrategySubtitle = view.findViewById(R.id.tv_strategy_subtitle)
 
-            tvStrategySubtitle?.text = selectedPreset.displayName
+            tvStrategySubtitle?.text = selectedPreset.shortName
 
             // Drag & Click Logic for the Circular Dock with Auto-Edge Magnetic Snapping
             dockPill?.setOnTouchListener(object : View.OnTouchListener {
@@ -311,23 +311,60 @@ open class FloatingHubService : Service() {
                             return true
                         }
                         MotionEvent.ACTION_UP -> {
+                            val screenWidth = resources.displayMetrics.widthPixels
+                            val screenHeight = resources.displayMetrics.heightPixels
+                            val middle = screenWidth / 2
+                            val pillWidth = dockPill?.width ?: 50
+                            val pillHeight = dockPill?.height ?: 50
+                            val safeTop = 40
+                            val safeBottom = (screenHeight - pillHeight - 40).coerceAtLeast(safeTop)
+                            params.y = params.y.coerceIn(safeTop, safeBottom)
+
                             if (isClick) {
                                 // Tactile Haptic Feedback
                                 dockPill?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                 // Toggle Expanded Menu on Click
                                 isExpanded = !isExpanded
-                                expandedMenu?.visibility = if (isExpanded) View.VISIBLE else View.GONE
                                 if (isExpanded) {
+                                    expandedMenu?.visibility = View.VISIBLE
                                     rootView?.animate()?.alpha(1.0f)?.setDuration(150)?.start()
                                     fadeHandler.removeCallbacks(fadeRunnable)
+
+                                    // If docked near right edge, adjust params.x so toolbar does not overflow screen
+                                    if (params.x > middle) {
+                                        view.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+                                        val totalWidth = view.measuredWidth
+                                        val targetExpandedX = (screenWidth - totalWidth - 16).coerceAtLeast(16)
+                                        ValueAnimator.ofInt(params.x, targetExpandedX).apply {
+                                            duration = 150
+                                            addUpdateListener { anim ->
+                                                params.x = anim.animatedValue as Int
+                                                try { windowManager.updateViewLayout(view, params) } catch (_: Exception) {}
+                                            }
+                                        }.start()
+                                    }
                                 } else {
+                                    expandedMenu?.visibility = View.GONE
+                                    // If collapsed and docked on right, snap back to right wall
+                                    if (params.x > middle) {
+                                        val targetCollapsedX = screenWidth - pillWidth - 16
+                                        ValueAnimator.ofInt(params.x, targetCollapsedX).apply {
+                                            duration = 150
+                                            addUpdateListener { anim ->
+                                                params.x = anim.animatedValue as Int
+                                                try { windowManager.updateViewLayout(view, params) } catch (_: Exception) {}
+                                            }
+                                            addListener(object : AnimatorListenerAdapter() {
+                                                override fun onAnimationEnd(animation: Animator) {
+                                                    settingsRepository.saveOverlayPosition(params.x, params.y)
+                                                }
+                                            })
+                                        }.start()
+                                    }
                                     resetIdleFade()
                                 }
                             } else {
                                 // 1. Auto-Edge Magnetic Snapping (Nearest Left/Right Border)
-                                val screenWidth = resources.displayMetrics.widthPixels
-                                val middle = screenWidth / 2
-                                val pillWidth = dockPill?.width ?: 50
                                 val targetX = if (params.x + pillWidth / 2 < middle) 16 else screenWidth - pillWidth - 16
 
                                 val animator = ValueAnimator.ofInt(params.x, targetX).apply {
@@ -365,8 +402,6 @@ open class FloatingHubService : Service() {
 
             // Strategy subtitle tap cycles preset with Haptic Feedback
             tvStrategySubtitle?.setOnClickListener {
-                tvStrategySubtitle?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                resetIdleFade()
                 cycleStrategyPreset()
             }
 
@@ -402,7 +437,7 @@ open class FloatingHubService : Service() {
             btnPlay?.setImageResource(android.R.drawable.ic_media_pause)
             btnPlay?.setColorFilter(0xFFF59E0B.toInt())
             tvStatusTitle?.text = "RUNNING"
-            Toast.makeText(this, "Macro Started [${selectedPreset.displayName}]", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Macro Started [${selectedPreset.shortName}]", Toast.LENGTH_SHORT).show()
 
             // 1. Launch FarmingFSM
             fsm.start(strategy = selectedPreset)
@@ -436,14 +471,16 @@ open class FloatingHubService : Service() {
     }
 
     private fun cycleStrategyPreset() {
+        tvStrategySubtitle?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+        resetIdleFade()
         val presets = FarmingPreset.values()
         val nextIndex = (presets.indexOf(selectedPreset) + 1) % presets.size
         selectedPreset = presets[nextIndex]
 
         farmingFSM?.setPreset(selectedPreset)
         settingsRepository.saveSelectedPreset(selectedPreset)
-        tvStrategySubtitle?.text = selectedPreset.displayName
-        Toast.makeText(this, "Strategy: ${selectedPreset.displayName}", Toast.LENGTH_SHORT).show()
+        tvStrategySubtitle?.text = selectedPreset.shortName
+        Toast.makeText(this, "Strategy: ${selectedPreset.shortName}", Toast.LENGTH_SHORT).show()
     }
 
     private fun setupEngines(projection: MediaProjection) {

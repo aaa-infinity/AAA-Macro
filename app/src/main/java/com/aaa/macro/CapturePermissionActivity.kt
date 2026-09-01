@@ -47,6 +47,8 @@ class CapturePermissionActivity : AppCompatActivity() {
                     action = FloatingHubService.ACTION_START_WITH_PROJECTION
                     putExtra("RESULT_CODE", result.resultCode)
                     putExtra("RESULT_DATA", result.data)
+                    putExtra("EXTRA_RESULT_CODE", result.resultCode)
+                    putExtra("EXTRA_RESULT_DATA", result.data)
                     putExtra(FloatingHubService.EXTRA_RESULT_CODE, result.resultCode)
                     putExtra(FloatingHubService.EXTRA_PROJECTION_DATA, result.data)
                 }

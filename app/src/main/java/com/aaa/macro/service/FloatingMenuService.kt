@@ -14,7 +14,6 @@ import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.IBinder
-import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Display
 import android.view.WindowManager
@@ -26,6 +25,7 @@ import com.aaa.macro.engine.FarmingFSM
 import com.aaa.macro.engine.HumanGestureDispatcher
 import com.aaa.macro.engine.OfflineVisionEngine
 import com.aaa.macro.engine.ResolutionScaler
+import com.aaa.macro.engine.ViewportDetector
 import com.aaa.macro.engine.WakeManager
 import com.aaa.macro.ui.FloatingOverlayView
 import kotlinx.coroutines.CoroutineScope
@@ -35,10 +35,13 @@ import kotlinx.coroutines.cancel
 import org.opencv.android.OpenCVLoader
 
 /**
- * Enterprise Foreground Service hosting the Floating Mini-Hub UI,
- * WakeLock Management, Cutout Safe-Area Offsets, MediaProjection Engine, and Farming FSM.
+ * Enterprise Foreground Service hosting the Floating Mini-Hub UI.
+ *
+ * Enforces Android 14 Strict Startup Order:
+ * - Executes startForeground() with FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION before creating VirtualDisplay.
+ * - Instantiates ViewportDetector for ultra-wide pillarbox correction (19.5:9 / 20:9).
  */
-class FloatingMenuService : Service() {
+open class FloatingMenuService : Service() {
 
     companion object {
         private const val TAG = "FloatingMenuService"
@@ -60,6 +63,7 @@ class FloatingMenuService : Service() {
     private lateinit var wakeManager: WakeManager
 
     private var cutoutManager: CutoutManager? = null
+    private var viewportDetector: ViewportDetector? = null
     private var visionEngine: OfflineVisionEngine? = null
     private var gestureDispatcher: HumanGestureDispatcher? = null
     private var farmingFSM: FarmingFSM? = null
@@ -80,10 +84,15 @@ class FloatingMenuService : Service() {
         wakeManager.acquireWakeLock()
 
         createNotificationChannel()
+
+        // Android 14 Enforcement: Start Foreground with MEDIA_PROJECTION immediately on create
         startForegroundWithNotification()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Enforce Foreground status before any projection calls
+        startForegroundWithNotification()
+
         if (intent?.action == ACTION_START_WITH_PROJECTION) {
             val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
             val projectionData: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -103,6 +112,9 @@ class FloatingMenuService : Service() {
     }
 
     private fun setupEnginesAndOverlay(resultCode: Int, projectionData: Intent) {
+        // 1. Android 14 Enforcement: Ensure Foreground Service is ACTIVE before creating MediaProjection
+        startForegroundWithNotification()
+
         val mediaProjection: MediaProjection = mediaProjectionManager.getMediaProjection(resultCode, projectionData)
 
         val metrics = resources.displayMetrics
@@ -119,31 +131,35 @@ class FloatingMenuService : Service() {
         val screenWidth = if (size.x > 0) size.x else metrics.widthPixels
         val screenHeight = if (size.y > 0) size.y else metrics.heightPixels
 
-        // 1. Cutout Safe-Area Manager
+        // 2. Cutout Safe-Area & Viewport Detector
         val cutout = CutoutManager(applicationContext)
         cutout.updateCutoutInsets(windowManager)
         this.cutoutManager = cutout
 
-        // 2. Resolution Scaler & Offline Vision Engine
+        val viewport = ViewportDetector(screenWidth, screenHeight)
+        this.viewportDetector = viewport
+
+        // 3. Resolution Scaler & Offline Vision Engine (Creates VirtualDisplay after startForeground)
         val resolutionScaler = ResolutionScaler(screenWidth, screenHeight)
         val vision = OfflineVisionEngine(applicationContext, resolutionScaler)
         vision.initializeCapture(mediaProjection, screenWidth, screenHeight, metrics.densityDpi)
         this.visionEngine = vision
 
-        // 3. Humanized Gesture Dispatcher
+        // 4. Humanized Gesture Dispatcher
         val gestures = HumanGestureDispatcher { MacroAccessibilityService.instance }
         this.gestureDispatcher = gestures
 
-        // 4. Farming Finite State Machine
+        // 5. Farming Finite State Machine
         val fsm = FarmingFSM(
             context = applicationContext,
             visionEngine = vision,
             gestureDispatcher = gestures,
-            cutoutManager = cutout
+            cutoutManager = cutout,
+            viewportDetector = viewport
         )
         this.farmingFSM = fsm
 
-        // 5. Floating Overlay UI View
+        // 6. Floating Overlay UI View
         overlayView?.detach()
         val overlay = FloatingOverlayView(
             context = applicationContext,
@@ -156,7 +172,7 @@ class FloatingMenuService : Service() {
         overlay.attach()
         this.overlayView = overlay
 
-        Log.i(TAG, "All enterprise farming engines and floating overlay attached successfully.")
+        Log.i(TAG, "All Android 14 compliant farming engines and overlay attached successfully.")
     }
 
     private fun createNotificationChannel() {

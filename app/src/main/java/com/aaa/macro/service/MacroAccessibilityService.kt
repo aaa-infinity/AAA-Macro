@@ -6,21 +6,24 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.KeyEvent
+import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
 import java.lang.ref.WeakReference
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Android Native Accessibility Service for No-Root Input Simulation.
+ * Android Native Accessibility Service with Package Safety Watcher & Hardware Kill-Switch.
  *
  * Features:
- * - High-speed dispatchGesture execution
- * - Hardware Kill-Switch (VOLUME_DOWN key event interceptor) for immediate macro abort
+ * - Package Safety Watcher: Detects when com.supercell.clashofclans loses foreground focus and pauses macro.
+ * - Hardware Kill-Switch: VOLUME_DOWN key event interceptor for instant abort.
+ * - High-speed dispatchGesture execution.
  */
 class MacroAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "MacroAccessibility"
+        private const val TARGET_GAME_PACKAGE = "com.supercell.clashofclans"
 
         private var instanceRef: WeakReference<MacroAccessibilityService>? = null
 
@@ -31,6 +34,7 @@ class MacroAccessibilityService : AccessibilityService() {
             get() = instance != null
 
         private val killSwitchListeners = CopyOnWriteArrayList<() -> Unit>()
+        private val focusLostListeners = CopyOnWriteArrayList<() -> Unit>()
 
         fun registerKillSwitchListener(listener: () -> Unit) {
             killSwitchListeners.add(listener)
@@ -38,6 +42,14 @@ class MacroAccessibilityService : AccessibilityService() {
 
         fun unregisterKillSwitchListener(listener: () -> Unit) {
             killSwitchListeners.remove(listener)
+        }
+
+        fun registerFocusLostListener(listener: () -> Unit) {
+            focusLostListeners.add(listener)
+        }
+
+        fun unregisterFocusLostListener(listener: () -> Unit) {
+            focusLostListeners.remove(listener)
         }
 
         fun triggerEmergencyAbort() {
@@ -50,6 +62,17 @@ class MacroAccessibilityService : AccessibilityService() {
                 }
             }
         }
+
+        fun triggerFocusLost() {
+            Log.w(TAG, "Target game lost foreground focus. Pausing macro.")
+            for (listener in focusLostListeners) {
+                try {
+                    listener.invoke()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error invoking focus lost listener", e)
+                }
+            }
+        }
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -57,7 +80,7 @@ class MacroAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instanceRef = WeakReference(this)
-        Log.i(TAG, "MacroAccessibilityService connected successfully with Key Filter capability.")
+        Log.i(TAG, "MacroAccessibilityService connected successfully with Package Safety Watcher.")
     }
 
     override fun onKeyEvent(event: KeyEvent?): Boolean {
@@ -68,7 +91,7 @@ class MacroAccessibilityService : AccessibilityService() {
             mainHandler.post {
                 Toast.makeText(
                     applicationContext,
-                    "🛑 AAA Macro Emergency Abort Activated (Volume Down)",
+                    "🛑 AAA Macro Emergency Abort (Volume Down)",
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -77,8 +100,24 @@ class MacroAccessibilityService : AccessibilityService() {
         return super.onKeyEvent(event)
     }
 
-    override fun onAccessibilityEvent(event: android.view.accessibility.AccessibilityEvent?) {
-        // Window state monitoring
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event == null) return
+
+        // Package Safety Watcher: Monitor foreground window changes
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val currentPkg = event.packageName?.toString() ?: return
+            val myPkg = packageName
+
+            // If another full-screen app or system UI comes to front, pause macro safety
+            if (currentPkg != TARGET_GAME_PACKAGE &&
+                currentPkg != myPkg &&
+                !currentPkg.contains("systemui") &&
+                !currentPkg.contains("inputmethod")
+            ) {
+                Log.d(TAG, "Non-game window detected ($currentPkg). Pausing macro.")
+                triggerFocusLost()
+            }
+        }
     }
 
     override fun onInterrupt() {

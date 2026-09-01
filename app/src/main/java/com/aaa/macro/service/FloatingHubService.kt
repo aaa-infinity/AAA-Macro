@@ -12,6 +12,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.graphics.Point
 import android.graphics.PointF
@@ -537,6 +538,29 @@ open class FloatingHubService : Service() {
             Log.i(TAG, "Engines and FSM successfully initialized with MediaProjection.")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to setup engines", e)
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (rootView != null && ::params.isInitialized) {
+            val displayMetrics = resources.displayMetrics
+            val screenWidth = displayMetrics.widthPixels
+            val screenHeight = displayMetrics.heightPixels
+
+            val pillWidth = dockPill?.width ?: 50
+            val pillHeight = dockPill?.height ?: 50
+
+            // Clamp coordinates within new landscape bounds
+            params.x = params.x.coerceIn(16, (screenWidth - pillWidth - 16).coerceAtLeast(16))
+            params.y = params.y.coerceIn(40, (screenHeight - pillHeight - 40).coerceAtLeast(40))
+
+            try {
+                windowManager.updateViewLayout(rootView, params)
+                Log.i(TAG, "FloatingHub orientation updated to ${if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) "LANDSCAPE" else "PORTRAIT"}: (${params.x}, ${params.y})")
+            } catch (e: Exception) {
+                Log.w(TAG, "Error updating view layout on orientation change", e)
+            }
         }
     }
 

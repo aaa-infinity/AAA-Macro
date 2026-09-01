@@ -12,6 +12,7 @@ import android.view.WindowManager
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import com.aaa.macro.R
+import com.aaa.macro.data.SettingsRepository
 import com.aaa.macro.databinding.LayoutFloatingMenuBinding
 import com.aaa.macro.engine.FarmingFSM
 import com.aaa.macro.model.FarmingPreset
@@ -27,11 +28,10 @@ import kotlinx.coroutines.launch
  * Enterprise Light Floating Mini-Hub Controller.
  *
  * Implements:
- * - Docked / Expanded draggable overlay widget
- * - Army Deployment Preset dropdown selector
- * - Gold, Elixir, and Dark Elixir (+/-) steppers
- * - Auto Wall-Dump toggle
- * - Touch-drag movement across screen boundaries
+ * - Data Persistence via SettingsRepository (Loot thresholds, Preset, Window X/Y)
+ * - Stealth Battery Dimming (screenBrightness = 0.01f)
+ * - System Navigation Inset & Edge Protection
+ * - Live Telemetry & Resource (+/-) Steppers
  */
 class FloatingOverlayView(
     private val context: Context,
@@ -42,6 +42,7 @@ class FloatingOverlayView(
     private val binding: LayoutFloatingMenuBinding = LayoutFloatingMenuBinding.inflate(LayoutInflater.from(context))
     private val params: WindowManager.LayoutParams = WindowManager.LayoutParams()
     private val scope = CoroutineScope(Dispatchers.Main + Job())
+    private val repository = SettingsRepository(context)
 
     private var initialX = 0
     private var initialY = 0
@@ -49,12 +50,24 @@ class FloatingOverlayView(
     private var initialTouchY = 0f
     private var isDragging = false
     private var isExpanded = true
+    private var isBatteryDimmingActive = false
 
     init {
+        restorePersistedSettings()
         setupWindowParams()
         setupListeners()
         setupPresetSpinner()
         observeState()
+    }
+
+    private fun restorePersistedSettings() {
+        val config = repository.loadLootConfig()
+        farmingFSM.lootConfig.minGold = config.minGold
+        farmingFSM.lootConfig.minElixir = config.minElixir
+        farmingFSM.lootConfig.minDarkElixir = config.minDarkElixir
+        farmingFSM.lootConfig.enableWallDump = config.enableWallDump
+        farmingFSM.isPassiveHarvestEnabled = repository.isPassiveHarvestEnabled
+        isBatteryDimmingActive = repository.isBatteryDimmingEnabled
     }
 
     private fun setupWindowParams() {
@@ -64,6 +77,8 @@ class FloatingOverlayView(
             @Suppress("DEPRECATION")
             WindowManager.LayoutParams.TYPE_PHONE
         }
+
+        val (savedX, savedY) = repository.loadOverlayPosition()
 
         params.apply {
             type = windowType
@@ -75,22 +90,33 @@ class FloatingOverlayView(
             width = WindowManager.LayoutParams.WRAP_CONTENT
             height = WindowManager.LayoutParams.WRAP_CONTENT
             gravity = Gravity.TOP or Gravity.START
-            x = 60
-            y = 120
+            x = savedX
+            y = savedY
+
+            if (isBatteryDimmingActive) {
+                screenBrightness = 0.01f
+            }
         }
     }
 
     private fun setupPresetSpinner() {
         val presets = FarmingPreset.values()
+        val savedPreset = repository.loadSelectedPreset()
+        farmingFSM.setPreset(savedPreset)
+
         val adapter = ArrayAdapter(
             context,
             android.R.layout.simple_spinner_dropdown_item,
             presets.map { it.displayName }
         )
         binding.spinnerArmyPreset.adapter = adapter
+        binding.spinnerArmyPreset.setSelection(presets.indexOf(savedPreset).coerceAtLeast(0))
+
         binding.spinnerArmyPreset.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                farmingFSM.setPreset(presets[position])
+                val preset = presets[position]
+                farmingFSM.setPreset(preset)
+                repository.saveSelectedPreset(preset)
             }
 
             override fun onNothingSelected(parent: AdapterView<*>?) {}
@@ -108,6 +134,7 @@ class FloatingOverlayView(
 
         binding.btnClose.setOnClickListener {
             farmingFSM.stop()
+            persistAllSettings()
             detach()
             onCloseRequested()
         }
@@ -135,11 +162,13 @@ class FloatingOverlayView(
             val cur = farmingFSM.lootConfig.minGold
             farmingFSM.lootConfig.minGold = (cur - 50_000).coerceAtLeast(0)
             updateLootThresholdText()
+            repository.saveLootConfig(farmingFSM.lootConfig)
         }
         binding.btnGoldPlus.setOnClickListener {
             val cur = farmingFSM.lootConfig.minGold
             farmingFSM.lootConfig.minGold = (cur + 50_000).coerceAtMost(2_000_000)
             updateLootThresholdText()
+            repository.saveLootConfig(farmingFSM.lootConfig)
         }
 
         // Elixir +/- 50k
@@ -147,11 +176,13 @@ class FloatingOverlayView(
             val cur = farmingFSM.lootConfig.minElixir
             farmingFSM.lootConfig.minElixir = (cur - 50_000).coerceAtLeast(0)
             updateLootThresholdText()
+            repository.saveLootConfig(farmingFSM.lootConfig)
         }
         binding.btnElixirPlus.setOnClickListener {
             val cur = farmingFSM.lootConfig.minElixir
             farmingFSM.lootConfig.minElixir = (cur + 50_000).coerceAtMost(2_000_000)
             updateLootThresholdText()
+            repository.saveLootConfig(farmingFSM.lootConfig)
         }
 
         // Dark Elixir +/- 500
@@ -159,19 +190,36 @@ class FloatingOverlayView(
             val cur = farmingFSM.lootConfig.minDarkElixir
             farmingFSM.lootConfig.minDarkElixir = (cur - 500).coerceAtLeast(0)
             updateLootThresholdText()
+            repository.saveLootConfig(farmingFSM.lootConfig)
         }
         binding.btnDePlus.setOnClickListener {
             val cur = farmingFSM.lootConfig.minDarkElixir
             farmingFSM.lootConfig.minDarkElixir = (cur + 500).coerceAtMost(20_000)
             updateLootThresholdText()
+            repository.saveLootConfig(farmingFSM.lootConfig)
         }
 
         // Wall Dump Toggle
+        binding.cbWallDump.isChecked = farmingFSM.lootConfig.enableWallDump
         binding.cbWallDump.setOnCheckedChangeListener { _, isChecked ->
             farmingFSM.lootConfig.enableWallDump = isChecked
+            repository.saveLootConfig(farmingFSM.lootConfig)
         }
 
         updateLootThresholdText()
+    }
+
+    private fun persistAllSettings() {
+        repository.saveLootConfig(farmingFSM.lootConfig)
+        repository.saveOverlayPosition(params.x, params.y)
+        repository.saveSelectedPreset(farmingFSM.selectedPreset.value)
+    }
+
+    fun setStealthBatteryDimming(enabled: Boolean) {
+        isBatteryDimmingActive = enabled
+        repository.isBatteryDimmingEnabled = enabled
+        params.screenBrightness = if (enabled) 0.01f else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        updateWindowLayout()
     }
 
     private fun updateLootThresholdText() {
@@ -208,12 +256,22 @@ class FloatingOverlayView(
                 if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
                     isDragging = true
                 }
-                params.x = initialX + dx.toInt()
-                params.y = initialY + dy.toInt()
+
+                val metrics = context.resources.displayMetrics
+                val maxX = metrics.widthPixels - 80
+                val maxY = metrics.heightPixels - 120
+
+                // System Navigation Insets & Edge Protection: Clamp X/Y
+                params.x = (initialX + dx.toInt()).coerceIn(20, maxX)
+                params.y = (initialY + dy.toInt()).coerceIn(50, maxY)
+
                 updateWindowLayout()
                 return true
             }
             MotionEvent.ACTION_UP -> {
+                if (isDragging) {
+                    repository.saveOverlayPosition(params.x, params.y)
+                }
                 return true
             }
         }

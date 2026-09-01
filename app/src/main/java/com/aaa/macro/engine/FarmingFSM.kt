@@ -1,9 +1,14 @@
 package com.aaa.macro.engine
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
 import android.graphics.PointF
 import android.graphics.Rect
+import android.os.Build
 import android.util.Log
+import androidx.core.app.NotificationCompat
+import com.aaa.macro.R
 import com.aaa.macro.model.BattleConfig
 import com.aaa.macro.model.FarmingPreset
 import com.aaa.macro.model.LootConfig
@@ -32,6 +37,9 @@ import java.util.Random
  * Enterprise Farming Finite State Machine (FarmingFSM).
  *
  * Coordinates:
+ * - Standard Unranked Battle Tab Lock
+ * - Passive Village Resource & Loot Cart Harvesting
+ * - Max Storage Capacity Notification Guard
  * - 40s Cloud Search Watchdog (Cancel & Retry matchmaking)
  * - Ultra-wide Viewport & Pillarbox Offsets (19.5:9 / 20:9)
  * - Package Safety Watcher (Auto-pause on focus loss)
@@ -49,16 +57,25 @@ class FarmingFSM(
 ) {
     companion object {
         private const val TAG = "FarmingFSM"
+        private const val ALERT_CHANNEL_ID = "aaa_macro_alerts"
+        private const val ALERT_NOTIF_ID = 9002
 
         // Canonical 1920x1080 Reference Coordinates
         private val COORD_HOME_ATTACK = PointF(105f, 950f)
-        private val COORD_FIND_MATCH = PointF(1420f, 720f)
+        private val COORD_UNRANKED_STANDARD_TAB = PointF(1420f, 720f)
         private val COORD_NEXT_BUTTON = PointF(1750f, 890f)
         private val COORD_CANCEL_SEARCH = PointF(960f, 910f)
         private val COORD_END_BATTLE = PointF(110f, 840f)
         private val COORD_CONFIRM_END = PointF(1100f, 620f)
         private val COORD_RETURN_HOME = PointF(960f, 910f)
         private val COORD_SAFE_ZONE = PointF(960f, 450f)
+
+        // Passive Village Resource Sweep Points (Collectors, Mines, Loot Cart)
+        private val VILLAGE_HARVEST_POINTS = listOf(
+            PointF(750f, 520f),  // Gold Mines quadrant
+            PointF(1180f, 520f), // Elixir Collectors quadrant
+            PointF(960f, 780f)   // Loot Cart / Central boundary
+        )
 
         // Localized Top-Left Loot HUD Box
         private val LOOT_HUD_BOX_1080P = Rect(40, 50, 480, 240)
@@ -88,12 +105,29 @@ class FarmingFSM(
     private val _logStream = MutableSharedFlow<String>(replay = 25)
     val logStream: SharedFlow<String> = _logStream.asSharedFlow()
 
+    var isPassiveHarvestEnabled: Boolean = true
+
     private var reloadDialogTemplate: Mat? = null
     private var tryAgainDialogTemplate: Mat? = null
 
     init {
+        createAlertChannel()
         loadTemplates()
         setupListeners()
+    }
+
+    private fun createAlertChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                ALERT_CHANNEL_ID,
+                "AAA Macro Alerts",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Critical alerts when storages are full or errors occur"
+            }
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            nm.createNotificationChannel(channel)
+        }
     }
 
     private fun setupListeners() {
@@ -148,7 +182,12 @@ class FarmingFSM(
                         }
 
                         MacroState.STATE_HOME -> {
-                            // Check Auto Wall-Dump if storages full
+                            // 1. Passive Resource Harvesting (Mines, Collectors, Loot Cart)
+                            if (isPassiveHarvestEnabled) {
+                                executePassiveResourceHarvest()
+                            }
+
+                            // 2. Check Auto Wall-Dump if storages high
                             if (lootConfig.enableWallDump) {
                                 wallDumpManager.executeWallDumpIfEligible(
                                     currentGold = _stats.value.totalGoldLooted,
@@ -157,7 +196,8 @@ class FarmingFSM(
                                 )
                             }
 
-                            emitLog("Detecting Home Base UI. Initiating Attack sequence...")
+                            // 3. Initiate Standard Unranked Battle Lock sequence
+                            emitLog("Initiating Standard Unranked Battle search...")
                             val success = executeHomeAttackSequence()
                             if (success) {
                                 currentSearchCount = 0
@@ -211,7 +251,8 @@ class FarmingFSM(
                                 _stats.value = _stats.value.copy(
                                     attacksExecuted = _stats.value.attacksExecuted + 1,
                                     totalGoldLooted = _stats.value.totalGoldLooted + loot.gold,
-                                    totalElixirLooted = _stats.value.totalElixirLooted + loot.elixir
+                                    totalElixirLooted = _stats.value.totalElixirLooted + loot.elixir,
+                                    totalDarkElixirLooted = _stats.value.totalDarkElixirLooted + loot.darkElixir
                                 )
                                 _state.value = MacroState.STATE_DEPLOY
                                 stateStartTime = System.currentTimeMillis()
@@ -330,12 +371,23 @@ class FarmingFSM(
         return cutoutManager.adjustCoordinate(viewportMapped)
     }
 
+    private suspend fun executePassiveResourceHarvest() {
+        emitLog("🌾 Harvesting Village Mines, Collectors & Loot Cart...")
+        for (pt in VILLAGE_HARVEST_POINTS) {
+            val adj = mapTargetCoordinate(pt)
+            gestureDispatcher.humanTap(adj.x, adj.y, jitterRadius = 15f)
+            gestureDispatcher.humanSleep(180L, 40L)
+        }
+    }
+
     private suspend fun executeHomeAttackSequence(): Boolean {
+        // Step 1: Tap Attack
         val adjAttack = mapTargetCoordinate(COORD_HOME_ATTACK)
         gestureDispatcher.humanTap(adjAttack.x, adjAttack.y)
         gestureDispatcher.humanSleep(900L, 150L)
 
-        val adjMatch = mapTargetCoordinate(COORD_FIND_MATCH)
+        // Step 2: Lock onto Standard Unranked Battle tab
+        val adjMatch = mapTargetCoordinate(COORD_UNRANKED_STANDARD_TAB)
         gestureDispatcher.humanTap(adjMatch.x, adjMatch.y)
         gestureDispatcher.humanSleep(1100L, 200L)
         return true
@@ -432,6 +484,20 @@ class FarmingFSM(
         val adjSafe = mapTargetCoordinate(COORD_SAFE_ZONE)
         gestureDispatcher.humanTap(adjSafe.x, adjSafe.y, jitterRadius = 30f)
         gestureDispatcher.humanSleep(500L, 100L)
+    }
+
+    fun triggerStorageFullAlert() {
+        val notification = NotificationCompat.Builder(context, ALERT_CHANNEL_ID)
+            .setContentTitle("⚠️ Storages Full (100% Capacity)")
+            .setContentText("Macro paused to prevent wasting Gold & Elixir.")
+            .setSmallIcon(R.drawable.ic_launcher)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .build()
+
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(ALERT_NOTIF_ID, notification)
+        pause()
     }
 
     fun pause() {

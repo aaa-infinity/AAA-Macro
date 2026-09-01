@@ -9,22 +9,26 @@ import android.hardware.display.VirtualDisplay
 import android.media.Image
 import android.media.ImageReader
 import android.media.projection.MediaProjection
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import java.nio.ByteBuffer
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 /**
- * High-Performance Single-Buffer Screen Capture Manager.
+ * Enterprise Single-Buffer Screen Capture Manager with MediaProjection.Callback.
  *
  * Implements low-latency MediaProjection frame extraction with:
  * - Single-buffer recycling to maintain <60 MB total RAM footprint
+ * - MediaProjection.Callback.onStop() automatic lifecycle teardown
  * - Direct Region-of-Interest (ROI) cropping without creating full-frame duplicate Bitmaps
- * - Thread-safe hardware surface locking
+ * - RowStride padding normalization
  */
 class ScreenCaptureManager(
     private val context: Context,
-    val resolutionScaler: ResolutionScaler
+    val resolutionScaler: ResolutionScaler,
+    private val onCaptureStoppedCallback: (() -> Unit)? = null
 ) {
     companion object {
         private const val TAG = "ScreenCaptureManager"
@@ -34,12 +38,22 @@ class ScreenCaptureManager(
     private var mediaProjection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private val captureLock = ReentrantLock()
 
     @Volatile
     var isInitialized: Boolean = false
         private set
+
+    private val projectionCallback = object : MediaProjection.Callback() {
+        override fun onStop() {
+            super.onStop()
+            Log.w(TAG, "MediaProjection session stopped by system. Disposing VirtualDisplay...")
+            release()
+            onCaptureStoppedCallback?.invoke()
+        }
+    }
 
     /**
      * Initializes the VirtualDisplay and single-buffer ImageReader.
@@ -56,6 +70,9 @@ class ScreenCaptureManager(
             this.mediaProjection = projection
             this.resolutionScaler.updateDimensions(width, height)
 
+            // Register system stop callback
+            projection.registerCallback(projectionCallback, mainHandler)
+
             // Buffer capacity of 2 for minimal latency and zero memory bloat
             val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
             this.imageReader = reader
@@ -68,7 +85,7 @@ class ScreenCaptureManager(
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 reader.surface,
                 null,
-                null
+                mainHandler
             )
 
             this.isInitialized = true
@@ -119,9 +136,6 @@ class ScreenCaptureManager(
     /**
      * Extracts only a localized Region-of-Interest (ROI) directly from the captured frame
      * avoiding large full-frame Bitmap retention in memory.
-     *
-     * @param cropRect Bounding box to extract.
-     * @return Cropped Bitmap for localized OCR / matching, or null.
      */
     fun acquireRoiBitmap(cropRect: Rect): Bitmap? {
         val fullBitmap = acquireLatestBitmap() ?: return null
@@ -161,6 +175,7 @@ class ScreenCaptureManager(
             }
 
             try {
+                mediaProjection?.unregisterCallback(projectionCallback)
                 mediaProjection?.stop()
                 mediaProjection = null
             } catch (e: Exception) {

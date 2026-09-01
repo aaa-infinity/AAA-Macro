@@ -60,6 +60,8 @@ class ScreenCaptureManager(
         }
 
         fun isReady(): Boolean = instance?.isReady() == true
+
+        fun getLatestBitmap(): Bitmap? = instance?.acquireLatestBitmap()
     }
 
     private var mediaProjection: MediaProjection? = null

@@ -42,6 +42,7 @@ import com.aaa.macro.MainActivity
 import com.aaa.macro.R
 import com.aaa.macro.data.SettingsRepository
 import com.aaa.macro.engine.CutoutManager
+import com.aaa.macro.engine.FarmingEngine
 import com.aaa.macro.engine.FarmingFSM
 import com.aaa.macro.engine.HumanGestureDispatcher
 import com.aaa.macro.engine.OfflineVisionEngine
@@ -397,7 +398,26 @@ open class FloatingHubService : Service() {
             btnPlay?.setOnClickListener {
                 btnPlay?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                 resetIdleFade()
-                onPlayPauseClicked()
+
+                if (!FarmingEngine.isRunning) {
+                    btnPlay?.setImageResource(android.R.drawable.ic_media_pause)
+                    btnPlay?.setColorFilter(0xFFF59E0B.toInt())
+
+                    FarmingEngine.start { statusText ->
+                        Handler(Looper.getMainLooper()).post {
+                            tvStatusTitle?.text = statusText
+                        }
+                    }
+                } else {
+                    btnPlay?.setImageResource(android.R.drawable.ic_media_play)
+                    btnPlay?.setColorFilter(0xFF10B981.toInt())
+
+                    FarmingEngine.stop { statusText ->
+                        Handler(Looper.getMainLooper()).post {
+                            tvStatusTitle?.text = statusText
+                        }
+                    }
+                }
             }
 
             // Strategy subtitle tap cycles preset with Haptic Feedback
@@ -408,6 +428,7 @@ open class FloatingHubService : Service() {
             // Close Button Listener with Tactile Haptic Feedback
             btnClose?.setOnClickListener {
                 btnClose?.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                FarmingEngine.stop { }
                 farmingFSM?.stop()
                 stopSelf()
             }
@@ -582,6 +603,7 @@ open class FloatingHubService : Service() {
             rootView = null
         }
 
+        FarmingEngine.stop { }
         farmingFSM?.release()
         farmingFSM = null
 

@@ -32,10 +32,40 @@ class HumanGestureDispatcher(
 ) {
     companion object {
         private const val TAG = "HumanGesture"
+        val defaultInstance = HumanGestureDispatcher()
+
+        suspend fun humanTap(x: Float, y: Float, jitterRadius: Float = 5f): Boolean {
+            return defaultInstance.humanTap(x, y, jitterRadius)
+        }
+
+        suspend fun humanMultiTap(points: List<PointF>) {
+            defaultInstance.humanMultiTap(points)
+        }
+
+        fun humanMultiTapBlocking(points: List<PointF>) {
+            defaultInstance.humanMultiTapBlocking(points)
+        }
     }
 
     private val random = Random()
     private val gestureMutex = Mutex()
+
+    /**
+     * Executes safe multi-tap sequence sequentially along coordinates.
+     */
+    suspend fun humanMultiTap(points: List<PointF>) {
+        points.forEach { pt ->
+            humanTap(pt.x, pt.y)
+            delay(80L + (random.nextDouble() * 40).toLong())
+        }
+    }
+
+    fun humanMultiTapBlocking(points: List<PointF>) {
+        points.forEach { pt ->
+            kotlinx.coroutines.runBlocking { humanTap(pt.x, pt.y) }
+            Thread.sleep(80L + (Math.random() * 40).toLong())
+        }
+    }
 
     /**
      * Executes a humanized tap with Gaussian spatial jitter and Touch Micro-Drift physics.

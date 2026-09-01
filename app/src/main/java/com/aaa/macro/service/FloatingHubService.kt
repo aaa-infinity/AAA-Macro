@@ -446,6 +446,7 @@ open class FloatingHubService : Service() {
     }
 
     private fun toggleAttackRecording() {
+        val tvDockText = rootView?.findViewById<TextView>(R.id.tv_dock_text)
         if (!TouchRecorder.isRecording) {
             // Start recording
             TouchRecorder.startRecording(this) { count ->
@@ -455,6 +456,8 @@ open class FloatingHubService : Service() {
             }
             btnRecord?.setImageResource(android.R.drawable.ic_menu_save)
             btnRecord?.setColorFilter(0xFFEF4444.toInt()) // Red recording indicator
+            tvDockText?.text = "● REC"
+            tvDockText?.setTextColor(0xFFEF4444.toInt())
             tvStatusTitle?.text = "RECORDING"
             Toast.makeText(
                 this,
@@ -466,6 +469,8 @@ open class FloatingHubService : Service() {
             val count = TouchRecorder.stopAndSave(customAttackMacroFile)
             btnRecord?.setImageResource(android.R.drawable.ic_btn_speak_now)
             btnRecord?.setColorFilter(0xFF10B981.toInt()) // Green saved indicator
+            tvDockText?.text = "AAA"
+            tvDockText?.setTextColor(0xFF10B981.toInt())
             tvStatusTitle?.text = "SAVED ($count)"
             Toast.makeText(
                 this,

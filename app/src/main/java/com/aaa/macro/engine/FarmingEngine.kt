@@ -74,8 +74,11 @@ object FarmingEngine {
                             state = GameState.MATCHMAKING
                         }
                         GameState.MATCHMAKING -> {
-                            onUpdate("SEARCHING: Inspecting Base...")
-                            delay(2000)
+                            for (step in 1..4) {
+                                if (!isRunning || !isActive) break
+                                onUpdate("MATCHMAKING: Finding target (${step}s)")
+                                delay(1000)
+                            }
                             state = GameState.COMBAT
                         }
                         GameState.COMBAT -> {

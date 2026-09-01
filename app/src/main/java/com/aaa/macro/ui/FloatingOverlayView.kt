@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.PixelFormat
 import android.os.Build
+import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -29,9 +30,10 @@ import kotlinx.coroutines.launch
  *
  * Implements:
  * - Data Persistence via SettingsRepository (Loot thresholds, Preset, Window X/Y)
+ * - Safe WindowManager parameters (FLAG_NOT_FOCUSABLE, FLAG_NOT_TOUCH_MODAL, PixelFormat.TRANSLUCENT)
+ * - Protected attach/detach with exception handling
  * - Stealth Battery Dimming (screenBrightness = 0.01f)
  * - System Navigation Inset & Edge Protection
- * - Live Telemetry & Resource (+/-) Steppers
  */
 class FloatingOverlayView(
     private val context: Context,
@@ -39,6 +41,10 @@ class FloatingOverlayView(
     private val farmingFSM: FarmingFSM,
     private val onCloseRequested: () -> Unit
 ) {
+    companion object {
+        private const val TAG = "FloatingOverlayView"
+    }
+
     private val binding: LayoutFloatingMenuBinding = LayoutFloatingMenuBinding.inflate(LayoutInflater.from(context))
     private val params: WindowManager.LayoutParams = WindowManager.LayoutParams()
     private val scope = CoroutineScope(Dispatchers.Main + Job())
@@ -83,6 +89,7 @@ class FloatingOverlayView(
         params.apply {
             type = windowType
             flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                     WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED or
                     WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
@@ -321,20 +328,34 @@ class FloatingOverlayView(
     }
 
     fun attach() {
-        if (binding.root.windowToken == null) {
-            windowManager.addView(binding.root, params)
+        try {
+            if (binding.root.windowToken == null) {
+                windowManager.addView(binding.root, params)
+                Log.i(TAG, "FloatingOverlayView attached to WindowManager successfully.")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error adding floating overlay view to WindowManager", e)
         }
     }
 
     fun detach() {
-        if (binding.root.windowToken != null) {
-            windowManager.removeView(binding.root)
+        try {
+            if (binding.root.windowToken != null) {
+                windowManager.removeView(binding.root)
+                Log.i(TAG, "FloatingOverlayView detached from WindowManager.")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error removing floating view from WindowManager", e)
         }
     }
 
     private fun updateWindowLayout() {
-        if (binding.root.windowToken != null) {
-            windowManager.updateViewLayout(binding.root, params)
+        try {
+            if (binding.root.windowToken != null) {
+                windowManager.updateViewLayout(binding.root, params)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error updating floating view layout", e)
         }
     }
 }

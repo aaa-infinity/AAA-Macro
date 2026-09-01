@@ -104,28 +104,29 @@ class ScreenCaptureManager(
             try {
                 image = reader.acquireLatestImage() ?: return null
 
-                val planes = image.planes
-                val buffer: ByteBuffer = planes[0].buffer
-                val pixelStride = planes[0].pixelStride
-                val rowStride = planes[0].rowStride
+                val plane = planes[0]
+                val buffer: ByteBuffer = plane.buffer
+                buffer.rewind()
+
+                val pixelStride = plane.pixelStride
+                val rowStride = plane.rowStride
                 val rowPadding = rowStride - pixelStride * image.width
 
-                val bitmap = Bitmap.createBitmap(
-                    image.width + rowPadding / pixelStride,
-                    image.height,
-                    Bitmap.Config.ARGB_8888
-                )
-                bitmap.copyPixelsFromBuffer(buffer)
-
-                return if (rowPadding == 0) {
-                    bitmap
+                if (rowPadding <= 0) {
+                    val bitmap = Bitmap.createBitmap(image.width, image.height, Bitmap.Config.ARGB_8888)
+                    bitmap.copyPixelsFromBuffer(buffer)
+                    return bitmap
                 } else {
-                    val cleanBitmap = Bitmap.createBitmap(bitmap, 0, 0, image.width, image.height)
-                    bitmap.recycle()
-                    cleanBitmap
+                    val paddedWidth = image.width + (rowPadding / pixelStride)
+                    val paddedBitmap = Bitmap.createBitmap(paddedWidth, image.height, Bitmap.Config.ARGB_8888)
+                    paddedBitmap.copyPixelsFromBuffer(buffer)
+
+                    val cleanBitmap = Bitmap.createBitmap(paddedBitmap, 0, 0, image.width, image.height)
+                    paddedBitmap.recycle()
+                    return cleanBitmap
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error acquiring screen frame", e)
+                Log.e(TAG, "Error acquiring screen frame: ${e.message}", e)
                 return null
             } finally {
                 image?.close()

@@ -11,11 +11,11 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import com.aaa.macro.service.FloatingMenuService
+import com.aaa.macro.service.FloatingHubService
 
 /**
  * Lightweight, transparent Activity dedicated to requesting MediaProjection screen capture consent
- * and routing the resulting permission token to FloatingMenuService.
+ * and routing the resulting permission token to FloatingHubService.
  */
 class CapturePermissionActivity : AppCompatActivity() {
 
@@ -43,10 +43,10 @@ class CapturePermissionActivity : AppCompatActivity() {
             if (result.resultCode == Activity.RESULT_OK && result.data != null) {
                 Log.i(TAG, "MediaProjection permission granted by user.")
 
-                val serviceIntent = Intent(this, FloatingMenuService::class.java).apply {
-                    action = FloatingMenuService.ACTION_START_WITH_PROJECTION
-                    putExtra(FloatingMenuService.EXTRA_RESULT_CODE, result.resultCode)
-                    putExtra(FloatingMenuService.EXTRA_PROJECTION_DATA, result.data)
+                val serviceIntent = Intent(this, FloatingHubService::class.java).apply {
+                    action = FloatingHubService.ACTION_START_WITH_PROJECTION
+                    putExtra(FloatingHubService.EXTRA_RESULT_CODE, result.resultCode)
+                    putExtra(FloatingHubService.EXTRA_PROJECTION_DATA, result.data)
                 }
 
                 ContextCompat.startForegroundService(this, serviceIntent)

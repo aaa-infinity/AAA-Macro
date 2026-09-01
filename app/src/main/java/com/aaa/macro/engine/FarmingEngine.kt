@@ -65,11 +65,11 @@ object FarmingEngine {
                     when (state) {
                         GameState.HOME -> {
                             onUpdate("HOME: Opening Attack Menu")
-                            MacroAccessibilityService.instance?.dispatchTap(w * 0.055f, h * 0.885f)
+                            HumanGestureDispatcher.humanTap(w * 0.055f, h * 0.885f)
                             delay(1200)
 
                             onUpdate("HOME: Finding Match")
-                            MacroAccessibilityService.instance?.dispatchTap(w * 0.78f, h * 0.72f)
+                            HumanGestureDispatcher.humanTap(w * 0.78f, h * 0.72f)
                             delay(2500)
                             state = GameState.MATCHMAKING
                         }
@@ -91,7 +91,7 @@ object FarmingEngine {
                             } else {
                                 onUpdate("COMBAT: Deploying Army")
                                 // 1. Select First Troop Slot
-                                MacroAccessibilityService.instance?.dispatchTap(w * 0.18f, h * 0.90f)
+                                HumanGestureDispatcher.humanTap(w * 0.18f, h * 0.90f)
                                 delay(300)
 
                                 // 2. Multi-point deployment spread
@@ -102,7 +102,7 @@ object FarmingEngine {
                                     PointF(w * 0.55f, h * 0.15f)
                                 )
                                 spread.forEach { pt ->
-                                    MacroAccessibilityService.instance?.dispatchTap(pt.x, pt.y)
+                                    HumanGestureDispatcher.humanTap(pt.x, pt.y)
                                     delay(120)
                                 }
                             }
@@ -117,11 +117,11 @@ object FarmingEngine {
                         }
                         GameState.RETURNING -> {
                             onUpdate("RETURNING: Ending Battle")
-                            MacroAccessibilityService.instance?.dispatchTap(w * 0.075f, h * 0.78f) // Surrender
+                            HumanGestureDispatcher.humanTap(w * 0.075f, h * 0.78f) // Surrender
                             delay(800)
-                            MacroAccessibilityService.instance?.dispatchTap(w * 0.58f, h * 0.62f)  // Confirm OK
+                            HumanGestureDispatcher.humanTap(w * 0.58f, h * 0.62f)  // Confirm OK
                             delay(2500)
-                            MacroAccessibilityService.instance?.dispatchTap(w * 0.50f, h * 0.85f)  // Return Home
+                            HumanGestureDispatcher.humanTap(w * 0.50f, h * 0.85f)  // Return Home
                             delay(3000)
                             state = GameState.HOME
                         }

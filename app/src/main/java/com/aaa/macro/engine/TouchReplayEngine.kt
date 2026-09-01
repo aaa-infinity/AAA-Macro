@@ -1,9 +1,6 @@
 package com.aaa.macro.engine
 
-import android.accessibilityservice.GestureDescription
-import android.graphics.Path
 import android.util.Log
-import com.aaa.macro.service.MacroAccessibilityService
 import kotlinx.coroutines.delay
 import org.json.JSONArray
 import java.io.File
@@ -14,8 +11,9 @@ import java.io.File
  * Implements:
  * - High-fidelity playback of user-recorded attack sequences.
  * - Dynamic resolution scaling (maps recorded X/Y ratios to current device pixel coordinates).
+ * - Anti-ban micro-drift and humanized spatial jitter via HumanGestureDispatcher.
  * - Millisecond-accurate gesture timing and progress tracking.
- * - Integration with MacroAccessibilityService for direct execution.
+ * - Concurrency safety and gesture mutex locking.
  */
 object TouchReplayEngine {
     private const val TAG = "TouchReplayEngine"
@@ -51,17 +49,14 @@ object TouchReplayEngine {
                 val y = (yRatio * screenHeight).coerceIn(1f, screenHeight - 1f)
 
                 val wait = time - lastTime
-                if (wait in 1..5000) {
+                if (wait in 1..8000) {
                     delay(wait)
                 }
                 lastTime = time
 
-                // Dispatch gesture for ACTION_DOWN (0) or ACTION_MOVE (2)
+                // Dispatch humanized gesture for ACTION_DOWN (0) or ACTION_MOVE (2)
                 if (action == 0 || action == 2) {
-                    val path = Path().apply { moveTo(x, y) }
-                    val stroke = GestureDescription.StrokeDescription(path, 0, 50)
-                    val gesture = GestureDescription.Builder().addStroke(stroke).build()
-                    MacroAccessibilityService.instance?.dispatchGesture(gesture, null, null)
+                    HumanGestureDispatcher.humanTap(x, y, jitterRadius = 2f)
                 }
 
                 onProgress?.invoke(i + 1, total)

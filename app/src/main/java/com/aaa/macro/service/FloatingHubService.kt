@@ -364,11 +364,10 @@ open class FloatingHubService : Service() {
                         MacroState.IDLE -> "IDLE"
                         MacroState.STATE_HOME -> "HOME"
                         MacroState.STATE_SEARCHING -> "SEARCH"
-                        MacroState.STATE_EVALUATE_LOOT -> "EVAL"
+                        MacroState.STATE_EVALUATE -> "EVAL"
                         MacroState.STATE_DEPLOY -> "ATTACK"
-                        MacroState.STATE_WATCH_BATTLE -> "BATTLE"
-                        MacroState.STATE_SURRENDER -> "SURR"
                         MacroState.STATE_RETURN_HOME -> "RETURN"
+                        MacroState.STATE_RECOVERY -> "RECOVER"
                     }
 
                     if (state == MacroState.IDLE) {
